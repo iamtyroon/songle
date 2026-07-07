@@ -1,0 +1,6 @@
+{
+  "name": "Songle - Daily Music Discovery Game & Dev Hub",
+  "description": "A daily music trivia game where players guess the song from audio snippets. Includes a full interactive developer hub with Firebase schema, Firestore security rules, and Next.js project structure.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
