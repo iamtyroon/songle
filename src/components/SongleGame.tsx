@@ -130,14 +130,11 @@ export default function SongleGame({
         
         // Fetch 5 songs from iTunes search dynamically to make it organic!
         // To be fast, we'll run search queries in parallel
-        const promises = PRESET_SONG_QUERIES.slice(0, 8).map(async (preset) => {
+        const promises = PRESET_SONG_QUERIES.slice(0, 8).map(async (term) => {
           try {
-            const results = await searchiTunesSongs(preset.term);
+            const results = await searchiTunesSongs(term);
             if (results && results.length > 0) {
-              // Map correct Spotify mock URL based on PRD config
-              const bestMatch = results[0];
-              bestMatch.spotifyUrl = `https://open.spotify.com/track/${preset.spotifyId}`;
-              return bestMatch;
+              return results[0];
             }
           } catch (e) {
             console.error("Single query failed", e);

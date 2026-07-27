@@ -12,21 +12,21 @@ export interface Song {
 
 // Preset popular songs that we can search for on iTunes to get high-quality 30s previews
 export const PRESET_SONG_QUERIES = [
-  { term: "The Weeknd Blinding Lights", spotifyId: "0VjIjW4GlUZAMY0vGZfI7n" },
-  { term: "Harry Styles As It Was", spotifyId: "4D7g79S6gI9vH9g7696gS9" },
-  { term: "Billie Eilish Bad Guy", spotifyId: "2b8fU6F6g3m7H1vD2S9uC6" },
-  { term: "Queen Bohemian Rhapsody", spotifyId: "7ldA9g7t8L9XUf9Gv2S9z9" },
-  { term: "Miley Cyrus Flowers", spotifyId: "0y96g8F6g7v7S9S9v6F6X9" },
-  { term: "Nirvana Smells Like Teen Spirit", spotifyId: "4S9v9g7t8F6v7v2u9F6X9" },
-  { term: "Michael Jackson Billie Jean", spotifyId: "5S9v9g7u8F6v7v2u9S9uC9" },
-  { term: "ABBA Dancing Queen", spotifyId: "0y6g8F6g7v7S9S9v6F6X99" },
-  { term: "Mark Ronson Uptown Funk", spotifyId: "32g8F6g7v7S9S9v6F6X992" },
-  { term: "Taylor Swift Blank Space", spotifyId: "1S9v9g7u8F6v7v2u9S9uC8" },
-  { term: "Daft Punk Get Lucky", spotifyId: "2g8F6g7v7S9S9v6F6X9923" },
-  { term: "Adele Rolling in the Deep", spotifyId: "4g8F6g7v7S9S9v6F6X9924" },
-  { term: "Ed Sheeran Shape of You", spotifyId: "7g8F6g7v7S9S9v6F6X9925" },
-  { term: "Coldplay Viva La Vida", spotifyId: "5g8F6g7v7S9S9v6F6X9926" },
-  { term: "Guns N' Roses Sweet Child O' Mine", spotifyId: "6g8F6g7v7S9S9v6F6X9927" }
+  "The Weeknd Blinding Lights",
+  "Harry Styles As It Was",
+  "Billie Eilish Bad Guy",
+  "Queen Bohemian Rhapsody",
+  "Miley Cyrus Flowers",
+  "Nirvana Smells Like Teen Spirit",
+  "Michael Jackson Billie Jean",
+  "ABBA Dancing Queen",
+  "Mark Ronson Uptown Funk",
+  "Taylor Swift Blank Space",
+  "Daft Punk Get Lucky",
+  "Adele Rolling in the Deep",
+  "Ed Sheeran Shape of You",
+  "Coldplay Viva La Vida",
+  "Guns N' Roses Sweet Child O' Mine"
 ];
 
 // Fallback high-quality music metadata if network/iTunes search fails
@@ -87,47 +87,6 @@ export const FALLBACK_SONGS: Song[] = [
     genre: "Pop"
   }
 ];
-
-export async function fetchSongsFromiTunes(): Promise<Song[]> {
-  try {
-    const fetchedSongs: Song[] = [];
-    
-    // We fetch a couple of presets to populate our dynamic database
-    // Fetch pop songs first as general database
-    const popRes = await fetch("https://itunes.apple.com/search?term=pop&limit=40&entity=song");
-    if (popRes.ok) {
-      const data = await popRes.json();
-      if (data.results && data.results.length > 0) {
-        data.results.forEach((track: any) => {
-          if (track.previewUrl && track.trackName && track.artistName) {
-            fetchedSongs.push({
-              id: String(track.trackId),
-              title: track.trackName,
-              artist: track.artistName,
-              previewUrl: track.previewUrl,
-              artworkUrl: track.artworkUrl100 ? track.artworkUrl100.replace("100x100bb", "300x300bb") : "",
-              spotifyUrl: `https://open.spotify.com/search/${encodeURIComponent(track.trackName + " " + track.artistName)}`,
-              album: track.collectionName || "",
-              releaseYear: track.releaseDate ? new Date(track.releaseDate).getFullYear() : undefined,
-              genre: track.primaryGenreName || ""
-            });
-          }
-        });
-      }
-    }
-    
-    // Fall back to PRESET_SONG_QUERIES if the pop general query didn't give enough,
-    // or return a blended set of fallback songs plus fetched ones.
-    if (fetchedSongs.length === 0) {
-      return FALLBACK_SONGS;
-    }
-    
-    return fetchedSongs;
-  } catch (err) {
-    console.error("Failed to fetch iTunes database, using fallback presets", err);
-    return FALLBACK_SONGS;
-  }
-}
 
 export async function searchiTunesSongs(query: string): Promise<Song[]> {
   if (!query || query.trim().length < 2) return [];

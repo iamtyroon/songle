@@ -33,11 +33,8 @@ import {
   collection, 
   getDocs, 
   query, 
-  orderBy, 
-  limit, 
-  where,
-  increment,
-  arrayUnion,
+  orderBy,
+  limit,
   serverTimestamp
 } from "firebase/firestore";
 import firebaseConfig from "../../firebase-applet-config.json";
