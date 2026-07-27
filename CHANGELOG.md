@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `logo.svg`: a scalable mark built from the waveform motif — solid bars for the snippet you have heard, faded bars for the track still locked. Replaces `logo.png` in the README
+- `logo.svg`: a scalable mark built from the waveform motif — solid bars for the snippet you have heard, faded bars for the track still locked. Used in the README and as the app header and footer mark, replacing the generic music-note icon (Vite inlines it as a data URI, so it costs no extra request)
 - Netlify production deployment at [play-songle.netlify.app](https://play-songle.netlify.app)
 - `firebase.json` and `.firebaserc` for Firestore rules deployment (`npx firebase-tools deploy --only firestore:rules`)
 - Project README with setup, architecture, and security documentation

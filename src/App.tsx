@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { 
-  Music, 
-  HelpCircle, 
+  HelpCircle,
   Sparkles,
   User,
   Settings,
@@ -15,6 +14,7 @@ import SongleGame from "./components/SongleGame";
 import AuthModal from "./components/AuthModal";
 import AccountSettingsModal from "./components/AccountSettingsModal";
 import { auth, db, logoutUser, syncUserProfile, UserProfile } from "./lib/firebase";
+import logoUrl from "../logo.svg";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 
@@ -114,9 +114,13 @@ export default function App() {
           
           {/* Logo & title branding */}
           <div className="flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-spotify flex items-center justify-center shadow-lg shadow-spotify/20">
-              <Music className="w-5.5 h-5.5 text-black fill-current" />
-            </div>
+            <img
+              src={logoUrl}
+              alt=""
+              width={40}
+              height={40}
+              className="w-10 h-10 rounded-[9px] shadow-lg shadow-spotify/20"
+            />
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold tracking-tight text-white font-display">
@@ -214,8 +218,8 @@ export default function App() {
       <footer className="mt-auto py-8 border-t border-bento-border bg-bento-bg text-zinc-500 text-xs font-mono">
         <div className="max-w-7xl mx-auto px-4 md:px-8 flex flex-col sm:flex-row justify-between items-center gap-4 text-center sm:text-left">
           <div>
-            <p className="text-zinc-400 font-bold flex items-center gap-1.5 justify-center sm:justify-start">
-              <Music className="w-3.5 h-3.5 text-spotify" /> SONGLE
+            <p className="text-zinc-400 font-bold flex items-center gap-2 justify-center sm:justify-start">
+              <img src={logoUrl} alt="" width={16} height={16} className="w-4 h-4 rounded-[3.5px]" /> SONGLE
             </p>
             <p className="mt-1 text-[11px] text-zinc-500">One song a day. Six guesses. Six seconds of rope.</p>
           </div>
