@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `logo.svg`: a scalable mark built from the waveform motif — solid bars for the snippet you have heard, faded bars for the track still locked. Replaces `logo.png` in the README
 - Netlify production deployment at [play-songle.netlify.app](https://play-songle.netlify.app)
 - `firebase.json` and `.firebaserc` for Firestore rules deployment (`npx firebase-tools deploy --only firestore:rules`)
 - Project README with setup, architecture, and security documentation
@@ -23,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stats and leaderboard cards flattened; nested card containers and icon-badge headers removed
 - Preset song list simplified to plain iTunes search terms; Spotify links now derive from iTunes results instead of hardcoded IDs
 - Dev server no longer hardcodes port 3000; `PORT` is honored when set
+- README screenshot recaptured against the current interface; feature list updated to describe the waveform timeline and guess feedback
 
 ### Removed
 
@@ -38,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hint row overlapped its own text below 400px; help modal title collided with the close button at 320px
 - Missing `fadeIn` keyframes meant the `animate-fadeIn` class silently did nothing
 - Keyboard focus was invisible on most controls; a global `:focus-visible` ring now applies
+- Sign-in failed on the deployed site with `auth/unauthorized-domain`: `play-songle.netlify.app` and `localhost` were missing from the Firebase Authentication authorized-domains list (a console/API setting, not a code change)
 
 ### Security
 

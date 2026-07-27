@@ -10,7 +10,7 @@
 <br />
 <div align="center">
   <a href="https://github.com/iamtyroon/songle">
-    <img src="logo.png" alt="Songle Logo" width="80" height="80">
+    <img src="logo.svg" alt="Songle Logo" width="80" height="80">
   </a>
 
   <h3 align="center">Songle</h3>
@@ -74,7 +74,9 @@ Songle is a modern, responsive daily music guessing game inspired by Heardle. Pl
 * **Seamless Account Upgrades**: Guest players can link an email and password at any time to preserve their stats, streaks, and leaderboard positions.
 * **Real-time Leaderboards**: Global high-score tracking with atomic transaction-based score submissions.
 * **Offline Resilience**: Configured with Firestore persistent local cache and multi-tab state synchronization.
-* **Modern UI/UX**: Designed with a sleek Bento Grid layout, custom audio visualizers, and smooth micro-interactions powered by Motion.
+* **Waveform Timeline**: A single track view carries the unlocked listening window, the snippet tier marks, and the playhead — no separate progress bar or timer to reconcile.
+* **Informative Guesses**: Each wrong guess reports the artist, album, genre, and release year you actually picked, with an arrow pointing toward the answer's year.
+* **Modern UI/UX**: Bento Grid layout, Archivo/Syne typography, and motion that respects `prefers-reduced-motion`.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Songle">
+  <title>Songle</title>
+  <rect width="128" height="128" rx="30" fill="#1DB954"/>
+  <g fill="#04140A">
+    <!-- Solid bars are the snippet you have heard; faded bars are the track still locked. -->
+    <rect x="18" y="38" width="12" height="52" rx="6"/>
+    <rect x="38" y="12" width="12" height="104" rx="6"/>
+    <rect x="58" y="26" width="12" height="76" rx="6" opacity=".42"/>
+    <rect x="78" y="44" width="12" height="40" rx="6" opacity=".42"/>
+    <rect x="98" y="32" width="12" height="64" rx="6" opacity=".42"/>
+  </g>
+</svg>
