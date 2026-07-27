@@ -9,7 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `logo.svg`: a scalable mark built from the waveform motif — solid bars for the snippet you have heard, faded bars for the track still locked. Used in the README and as the app header and footer mark, replacing the generic music-note icon (Vite inlines it as a data URI, so it costs no extra request)
+- Favicon, apple-touch-icon, and `theme-color`, all driven by `logo.svg`
+- Page `<title>` and meta description, plus Open Graph and Twitter card tags with a 1200×630 preview image (`public/og.png`) so shared links render a card instead of a bare URL
+- `public/logo.svg`: a scalable mark built from the waveform motif — solid bars for the snippet you have heard, faded bars for the track still locked. Used in the README and as the app header and footer mark, replacing the generic music-note icon (Vite inlines it as a data URI, so it costs no extra request)
 - Netlify production deployment at [play-songle.netlify.app](https://play-songle.netlify.app)
 - `firebase.json` and `.firebaserc` for Firestore rules deployment (`npx firebase-tools deploy --only firestore:rules`)
 - Project README with setup, architecture, and security documentation
@@ -25,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Preset song list simplified to plain iTunes search terms; Spotify links now derive from iTunes results instead of hardcoded IDs
 - Dev server no longer hardcodes port 3000; `PORT` is honored when set
 - README screenshot recaptured against the current interface; feature list updated to describe the waveform timeline and guess feedback
+- Logo and screenshot moved into `public/` so the same files serve the app, the favicon, and the README (`scrnshot.png` is now `public/screenshot.png`)
 
 ### Removed
 

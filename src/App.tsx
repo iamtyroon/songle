@@ -5,7 +5,6 @@ import SongleGame from "./components/SongleGame";
 import AuthModal from "./components/AuthModal";
 import AccountSettingsModal from "./components/AccountSettingsModal";
 import { auth, db, logoutUser, syncUserProfile, UserProfile } from "./lib/firebase";
-import logoUrl from "../logo.svg";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 
@@ -106,7 +105,7 @@ export default function App() {
           {/* Logo & title branding */}
           <div className="flex items-center gap-3.5">
             <img
-              src={logoUrl}
+              src="/logo.svg"
               alt=""
               width={40}
               height={40}
@@ -210,7 +209,7 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 md:px-8 flex flex-col sm:flex-row justify-between items-center gap-4 text-center sm:text-left">
           <div>
             <p className="text-zinc-400 font-bold flex items-center gap-2 justify-center sm:justify-start">
-              <img src={logoUrl} alt="" width={16} height={16} className="w-4 h-4 rounded-[3.5px]" /> SONGLE
+              <img src="/logo.svg" alt="" width={16} height={16} className="w-4 h-4 rounded-[3.5px]" /> SONGLE
             </p>
             <p className="mt-1 text-[11px] text-zinc-500">One song a day. Six guesses. Six seconds of rope.</p>
           </div>

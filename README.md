@@ -10,7 +10,7 @@
 <br />
 <div align="center">
   <a href="https://github.com/iamtyroon/songle">
-    <img src="logo.svg" alt="Songle Logo" width="80" height="80">
+    <img src="public/logo.svg" alt="Songle Logo" width="80" height="80">
   </a>
 
   <h3 align="center">Songle</h3>
@@ -352,4 +352,4 @@ Project Link: [https://github.com/iamtyroon/songle](https://github.com/iamtyroon
 [TypeScriptlang.org]: https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white
 [TypeScript-url]: https://www.typescriptlang.org/
 
-[product-screenshot]: scrnshot.png
+[product-screenshot]: public/screenshot.png
