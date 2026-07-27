@@ -10,7 +10,7 @@ import {
   Activity,
   Flame
 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, MotionConfig } from "motion/react";
 import SongleGame from "./components/SongleGame";
 import AuthModal from "./components/AuthModal";
 import AccountSettingsModal from "./components/AccountSettingsModal";
@@ -97,6 +97,7 @@ export default function App() {
   };
 
   return (
+    <MotionConfig reducedMotion="user">
     <div className="min-h-screen bg-bento-bg text-zinc-100 flex flex-col font-sans selection:bg-spotify/30 selection:text-spotify antialiased relative overflow-x-hidden">
       
       {/* Subtle grid pattern background */}
@@ -122,7 +123,7 @@ export default function App() {
                   SONGLE
                 </h1>
               </div>
-              <p className="text-xs text-zinc-400 font-mono">Daily Music Discovery Game</p>
+              <p className="text-xs text-zinc-400 font-mono">Name the song. Start with one second.</p>
             </div>
           </div>
 
@@ -216,7 +217,7 @@ export default function App() {
             <p className="text-zinc-400 font-bold flex items-center gap-1.5 justify-center sm:justify-start">
               <Music className="w-3.5 h-3.5 text-spotify" /> SONGLE
             </p>
-            <p className="mt-1 text-[11px] text-zinc-500">Designed with modern responsive precision, elegant Bento Grid layout elements, and Spotify Green accents.</p>
+            <p className="mt-1 text-[11px] text-zinc-500">One song a day. Six guesses. Six seconds of rope.</p>
           </div>
           <div className="flex items-center gap-4 text-[11px] text-zinc-500">
             <span>Powered by iTunes Search API</span>
@@ -225,5 +226,6 @@ export default function App() {
       </footer>
 
     </div>
+    </MotionConfig>
   );
 }

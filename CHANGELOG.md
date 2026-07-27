@@ -15,7 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Play area consolidated: the sound-wave visualizer, 6-segment progress bar, and elapsed-time readout are now a single waveform timeline showing the unlocked window, snippet tier marks, and a playhead
+- Guess result chips show the guessed artist, album, and genre values instead of the uninformative "Wrong Artist"/"Wrong Album" labels
+- Motion reworked: removed five always-running ambient animations; added an album-art defocus reveal on game over and entrance motion on new guess rows; all Framer Motion now honors `prefers-reduced-motion` via `MotionConfig`
+- Typography changed from Inter/Space Grotesk to Archivo/Syne
+- Interface copy rewritten in plain language (e.g. "CURRENT TIME COORDINATES" is now the date itself)
+- Stats and leaderboard cards flattened; nested card containers and icon-badge headers removed
 - Preset song list simplified to plain iTunes search terms; Spotify links now derive from iTunes results instead of hardcoded IDs
+- Dev server no longer hardcodes port 3000; `PORT` is honored when set
 
 ### Removed
 
@@ -27,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Broken "Play on Spotify" links caused by invented Spotify track IDs in presets
+- Guess-distribution rows with a count of zero rendered a visible bar stub
+- Hint row overlapped its own text below 400px; help modal title collided with the close button at 320px
+- Missing `fadeIn` keyframes meant the `animate-fadeIn` class silently did nothing
+- Keyboard focus was invisible on most controls; a global `:focus-visible` ring now applies
 
 ### Security
 

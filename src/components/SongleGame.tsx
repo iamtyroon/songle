@@ -14,13 +14,11 @@ import {
   Calendar, 
   Sparkles, 
   Share2, 
-  TrendingUp, 
   HelpCircle, 
   Clock,
   Check,
   ChevronRight,
   User,
-  Activity,
   AlertCircle,
   Trophy,
   Users,
@@ -43,6 +41,22 @@ import {
 } from "../lib/firebase";
 
 const ATTEMPT_DURATIONS = [1, 2, 4, 7, 11, 16];
+const MAX_DURATION = ATTEMPT_DURATIONS[ATTEMPT_DURATIONS.length - 1];
+
+// Fixed pseudo-waveform envelope. Deterministic so the track looks like the same
+// recording on every render instead of reshuffling under the playhead.
+const WAVE = Array.from({ length: 72 }, (_, i) =>
+  Math.min(
+    1,
+    0.22 +
+      0.78 *
+        Math.abs(
+          Math.sin(i * 0.61) * 0.55 +
+            Math.sin(i * 0.17) * 0.3 +
+            Math.sin(i * 1.93) * 0.25
+        )
+  )
+);
 
 interface Guess {
   text: string;
@@ -632,11 +646,12 @@ export default function SongleGame({
                     <Calendar className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5 justify-center sm:justify-start">
-                      Daily Songle Completed <span className="inline-block w-2 h-2 rounded-full bg-spotify animate-ping" />
+                    <h4 className="text-sm font-bold text-white flex items-center gap-2 justify-center sm:justify-start">
+                      Today's song is done
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-spotify" />
                     </h4>
-                    <p className="text-[10px] text-zinc-300 font-mono mt-0.5 leading-relaxed">
-                      You've already solved today's daily discovery! Come back tomorrow.
+                    <p className="text-[11px] text-zinc-400 font-mono mt-0.5 leading-relaxed">
+                      Next one at midnight UTC.
                     </p>
                   </div>
                 </div>
@@ -653,92 +668,113 @@ export default function SongleGame({
             {isDailyRestoring && (
               <div className="w-full mb-6 bg-zinc-950/40 border border-bento-border/50 rounded-2xl p-4 flex items-center justify-center gap-3 z-10 relative">
                 <div className="w-4 h-4 border-2 border-spotify border-t-transparent rounded-full animate-spin" />
-                <span className="text-xs font-mono text-zinc-400">Verifying Daily Play Lock...</span>
+                <span className="text-xs font-mono text-zinc-400">Checking today's play</span>
               </div>
             )}
 
-            {/* Dynamic Sound Wave Visualizer when playing */}
-            <div className="flex items-end justify-center gap-1.5 h-16 mb-6 w-full max-w-xs">
-              {Array.from({ length: 24 }).map((_, i) => (
-                <motion.div
-                  key={i}
-                  className={`w-1 rounded-full ${gameOver && hasWon ? "bg-spotify" : isPlaying ? "bg-spotify" : "bg-zinc-800"}`}
-                  animate={isPlaying ? {
-                    height: [12, Math.floor(Math.random() * 48) + 12, 12]
-                  } : { height: 6 }}
-                  transition={isPlaying ? {
-                    duration: 0.5 + (i % 4) * 0.1,
-                    repeat: Infinity,
-                    ease: "easeInOut"
-                  } : { duration: 0.2 }}
-                />
-              ))}
-            </div>
+            {/* Track timeline: unlocked window, playhead, and snippet tiers in one view */}
+            <div className="w-full mb-7">
+              <div className="flex items-end justify-between mb-3 gap-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <button
+                    onClick={toggleMute}
+                    className="text-zinc-400 hover:text-white p-1.5 -ml-1.5 rounded-lg hover:bg-zinc-900 transition-colors cursor-pointer"
+                    title={isMuted ? "Unmute" : "Mute"}
+                  >
+                    {isMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4" />}
+                  </button>
 
-            {/* Progress Timeline Segments */}
-            <div className="w-full mb-6">
-              <div className="flex justify-between items-center text-xs font-mono text-zinc-400 mb-2">
-                <span className="font-semibold tracking-wide">Snippets Unlocked: {currentAttempt + 1} / 6</span>
-                <div className="flex items-center gap-1 bg-zinc-900/60 border border-bento-border px-2 py-0.5 rounded-md">
-                  <Clock className="w-3.5 h-3.5 text-amber-500" />
-                  <span className="text-amber-500 font-semibold text-[11px]">Speed Bonus: +{speedBonus}</span>
+                  {/* Playing indicator — only motion in the header, and only when audio runs */}
+                  <div className="flex items-end gap-0.5 h-3.5 w-3.5" aria-hidden="true">
+                    {[0, 1, 2].map((i) => (
+                      <div
+                        key={i}
+                        className={`w-[3px] h-full rounded-full ${isPlaying ? "bg-spotify eq-bar" : "bg-zinc-700"}`}
+                        style={isPlaying ? { animationDelay: `${i * 0.16}s` } : undefined}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-white leading-tight">
+                      Snippet {currentAttempt + 1}
+                      <span className="text-zinc-500 font-normal"> of 6</span>
+                    </p>
+                    <p className="text-[11px] text-zinc-500 font-mono leading-tight mt-0.5">
+                      first {totalPlayableTime}s unlocked
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-right flex-shrink-0">
+                  <p className="text-sm font-mono text-zinc-200 tabular-nums leading-tight">
+                    {currentTime.toFixed(1)}
+                    <span className="text-zinc-600">/{totalPlayableTime}s</span>
+                  </p>
+                  <p className="text-[11px] font-mono text-amber-500/90 leading-tight mt-0.5 flex items-center gap-1 justify-end">
+                    <Clock className="w-3 h-3" /> +{speedBonus} speed
+                  </p>
                 </div>
               </div>
-              
-              {/* Segmented bar */}
-              <div className="grid grid-cols-6 gap-1 w-full h-2.5 bg-zinc-950 rounded-full overflow-hidden border border-bento-border/50">
-                {ATTEMPT_DURATIONS.map((dur, idx) => {
-                  const isActive = idx <= currentAttempt;
-                  const isCurrent = idx === currentAttempt;
-                  
-                  let barColor = "bg-zinc-900";
-                  if (isActive) {
-                    barColor = "bg-zinc-700";
-                  }
-                  if (isCurrent) {
-                    barColor = isPlaying ? "bg-spotify animate-pulse" : "bg-spotify";
-                  }
-                  if (gameOver) {
-                    barColor = hasWon ? "bg-spotify" : "bg-rose-500";
-                  }
 
-                  return (
-                    <div 
-                      key={idx} 
-                      className={`h-full transition-all duration-300 rounded-full ${barColor}`} 
-                      title={`Level ${idx + 1}: ${dur}s`}
-                    />
-                  );
-                })}
+              {/* Waveform */}
+              <div className="relative h-20 w-full select-none">
+                <div className="absolute inset-0 flex items-center gap-[2px]">
+                  {WAVE.map((amp, i) => {
+                    const t = (i / WAVE.length) * MAX_DURATION;
+                    const isPlayed = isPlaying && t <= currentTime;
+                    const isUnlocked = t < totalPlayableTime;
+
+                    let tone = "bg-zinc-800";
+                    if (isUnlocked) tone = "bg-zinc-600";
+                    if (isPlayed) tone = "bg-spotify";
+                    if (gameOver) tone = isUnlocked ? (hasWon ? "bg-spotify" : "bg-rose-500/70") : "bg-zinc-800";
+
+                    return (
+                      <div
+                        key={i}
+                        className={`flex-1 rounded-full transition-colors duration-100 ${tone}`}
+                        style={{ height: `${amp * 100}%` }}
+                      />
+                    );
+                  })}
+                </div>
+
+                {/* Tier boundaries — where the next guess buys you more track */}
+                {ATTEMPT_DURATIONS.slice(0, -1).map((dur, idx) => (
+                  <div
+                    key={dur}
+                    className={`absolute top-0 bottom-0 w-px pointer-events-none ${
+                      idx < currentAttempt ? "bg-spotify/40" : "bg-zinc-500/20"
+                    }`}
+                    style={{ left: `${(dur / MAX_DURATION) * 100}%` }}
+                  />
+                ))}
+
+                {/* Playhead */}
+                {isPlaying && (
+                  <div
+                    className="absolute top-0 bottom-0 w-px bg-white pointer-events-none shadow-[0_0_10px_2px] shadow-spotify/60"
+                    style={{ left: `${Math.min((currentTime / MAX_DURATION) * 100, 100)}%` }}
+                  />
+                )}
               </div>
 
-              <div className="flex justify-between items-center text-[10px] font-mono text-zinc-500 mt-2 px-1">
-                <span>1s</span>
-                <span>2s</span>
-                <span>4s</span>
-                <span>7s</span>
-                <span>11s</span>
-                <span>16s (Max)</span>
-              </div>
-            </div>
-
-            {/* Audio Visual Timer Bar */}
-            <div className="w-full bg-bento-bg px-4 py-3.5 rounded-2xl border border-bento-border flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <button 
-                  onClick={toggleMute}
-                  className="text-zinc-400 hover:text-white p-1.5 rounded-xl hover:bg-zinc-900 transition cursor-pointer"
-                  title={isMuted ? "Unmute" : "Mute"}
-                >
-                  {isMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-zinc-300" />}
-                </button>
-                <span className="text-xs text-zinc-400 font-mono">
-                  Listening Window: <span className="text-spotify font-medium">0s - {totalPlayableTime}s</span>
-                </span>
-              </div>
-
-              <div className="text-xs font-mono text-zinc-300 font-semibold bg-bento-card px-2.5 py-1 rounded-lg border border-bento-border">
-                {currentTime.toFixed(1)}s / {totalPlayableTime}s
+              <div className="relative h-4 mt-1.5">
+                {ATTEMPT_DURATIONS.map((dur, idx) => (
+                  <span
+                    key={dur}
+                    className={`absolute top-0 text-[10px] font-mono -translate-x-1/2 transition-colors ${
+                      idx <= currentAttempt ? "text-zinc-400" : "text-zinc-700"
+                    }`}
+                    style={{
+                      left: `${(dur / MAX_DURATION) * 100}%`,
+                      transform: dur === MAX_DURATION ? "translateX(-100%)" : undefined
+                    }}
+                  >
+                    {dur}s
+                  </span>
+                ))}
               </div>
             </div>
 
@@ -760,9 +796,9 @@ export default function SongleGame({
                 onClick={isPlaying ? pauseAudio : playAudio}
                 disabled={isLoading || gameOver}
                 className={`w-20 h-20 rounded-full flex items-center justify-center cursor-pointer transition-all border shadow-lg disabled:opacity-40 ${
-                  isPlaying 
-                    ? "bg-rose-500/10 border-rose-500 text-rose-400 shadow-rose-500/10" 
-                    : "bg-spotify text-black border-spotify shadow-spotify/20 hover:bg-spotify-hover"
+                  isPlaying
+                    ? "bg-rose-500/10 border-rose-500 text-rose-400 shadow-rose-500/10 ring-4 ring-rose-500/10"
+                    : "bg-spotify text-black border-spotify shadow-xl shadow-spotify/30 ring-4 ring-spotify/15 hover:bg-spotify-hover hover:ring-spotify/25"
                 }`}
               >
                 {isPlaying ? (
@@ -792,27 +828,22 @@ export default function SongleGame({
             <div className="w-full mb-6">
               <button
                 onClick={onOpenHowToPlay}
-                className="w-full bg-zinc-950/20 hover:bg-zinc-900/40 border border-bento-border/50 hover:border-spotify/30 rounded-2xl p-4.5 flex items-center justify-between transition group cursor-pointer text-left"
+                className="w-full bg-zinc-950/20 hover:bg-zinc-900/40 border border-bento-border/50 hover:border-spotify/30 rounded-2xl px-4 py-3.5 flex items-center justify-between gap-3 transition-colors group cursor-pointer text-left"
               >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-9 h-9 rounded-xl bg-spotify/10 flex items-center justify-center text-spotify group-hover:scale-105 transition-transform flex-shrink-0">
-                    <Sparkles className="w-4 h-4 animate-pulse" />
-                  </div>
-                  <div className="min-w-0">
-                    <h5 className="text-xs font-bold text-zinc-100 flex items-center gap-1.5">
-                      Need a Hint?
-                      <span className="text-[9px] font-mono bg-zinc-900 px-1.5 py-0.5 rounded text-zinc-400">
-                        {guesses.length} / 6 Guesses
-                      </span>
-                    </h5>
-                    <p className="text-[10px] text-zinc-500 font-mono mt-0.5 truncate">
-                      Unlock progress-based clues (Year, Genre, Album, and Artist reveals)
-                    </p>
-                  </div>
+                <div className="min-w-0">
+                  <h5 className="text-xs font-bold text-zinc-100 flex items-center gap-2">
+                    Stuck?
+                    <span className="text-[10px] font-mono bg-zinc-900 px-1.5 py-0.5 rounded text-zinc-400 flex-shrink-0">
+                      {guesses.length}/6 used
+                    </span>
+                  </h5>
+                  <p className="text-[11px] text-zinc-500 font-mono mt-1 truncate">
+                    Every guess unlocks another clue — year, album, then the artist.
+                  </p>
                 </div>
-                <div className="flex items-center gap-1 text-xs text-spotify font-semibold font-mono flex-shrink-0">
-                  <span>How to Play & Clues</span>
-                  <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                <div className="flex items-center gap-1 text-xs text-spotify font-mono flex-shrink-0">
+                  <span className="hidden sm:inline">Rules &amp; clues</span>
+                  <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
                 </div>
               </button>
             </div>
@@ -893,33 +924,36 @@ export default function SongleGame({
                   const matchesGenre = guessedSong && dailySong && guessedSong.genre && dailySong.genre &&
                     guessedSong.genre.toLowerCase().trim() === dailySong.genre.toLowerCase().trim();
 
-                  let yearBadgeColor = "bg-zinc-900/50 border-bento-border/40 text-zinc-500";
+                  let yearBadgeColor = "bg-zinc-900/60 border-bento-border/50 text-zinc-500";
                   let yearArrow = "";
                   let yearText = "Wrong Year";
 
                   if (guessedSong && dailySong && guessedSong.releaseYear && dailySong.releaseYear) {
                     if (guessedSong.releaseYear === dailySong.releaseYear) {
-                      yearBadgeColor = "bg-emerald-500/10 border-emerald-500/30 text-emerald-400";
+                      yearBadgeColor = "bg-spotify/10 border-spotify/40 text-spotify";
                       yearText = `${guessedSong.releaseYear}`;
                     } else if (guessedSong.releaseYear < dailySong.releaseYear) {
                       yearBadgeColor = "bg-amber-500/10 border-amber-500/30 text-amber-400";
                       yearText = `${guessedSong.releaseYear}`;
-                      yearArrow = "🔼"; // Target is newer
+                      yearArrow = "up"; // Target is newer
                     } else {
                       yearBadgeColor = "bg-amber-500/10 border-amber-500/30 text-amber-400";
                       yearText = `${guessedSong.releaseYear}`;
-                      yearArrow = "🔽"; // Target is older
+                      yearArrow = "down"; // Target is older
                     }
                   } else if (guessedSong && guessedSong.releaseYear) {
                     yearText = `${guessedSong.releaseYear}`;
                   }
 
                   return (
-                    <div 
-                      key={idx} 
-                      className={`flex flex-col gap-2 px-4 py-3.5 rounded-2xl border text-sm font-medium transition-all ${
-                        isCorrect 
-                          ? "bg-spotify/10 border-spotify/30 text-spotify" 
+                    <motion.div
+                      key={idx}
+                      initial={{ opacity: 0, y: -6, scale: 0.99 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                      className={`flex flex-col gap-2 px-4 py-3.5 rounded-2xl border text-sm font-medium ${
+                        isCorrect
+                          ? "bg-spotify/10 border-spotify/40 text-spotify"
                           : isSkipped
                             ? "bg-zinc-900/40 border-bento-border text-zinc-400"
                             : "bg-zinc-950/40 border-bento-border text-zinc-300"
@@ -944,71 +978,48 @@ export default function SongleGame({
                       </div>
 
                       {/* Attribute comparisons for active guess */}
+                      {/* Each chip shows what you guessed; green means it matches today's song */}
                       {!isSkipped && guessedSong && (
                         <div className="flex flex-wrap gap-1.5 mt-1.5">
-                          {/* Artist badge */}
-                          <div 
-                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[10px] font-mono font-bold uppercase ${
-                              matchesArtist 
-                                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" 
-                                : "bg-zinc-900/50 border-bento-border/40 text-zinc-500"
-                            }`}
-                            title={matchesArtist ? "Artist matches!" : "Wrong Artist"}
-                          >
-                            <User className="w-3 h-3" />
-                            <span>{matchesArtist ? "Artist Match" : "Wrong Artist"}</span>
-                          </div>
+                          {[
+                            { Icon: User, value: guessedSong.artist, ok: !!matchesArtist, axis: "Artist" },
+                            { Icon: Disc, value: guessedSong.album || "Single", ok: !!matchesAlbum, axis: "Album" },
+                            { Icon: Tag, value: guessedSong.genre || "Unknown", ok: !!matchesGenre, axis: "Genre" }
+                          ].map(({ Icon, value, ok, axis }) => (
+                            <div
+                              key={axis}
+                              title={`${axis}: ${value}${ok ? " — matches" : ""}`}
+                              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-mono max-w-[170px] ${
+                                ok
+                                  ? "bg-spotify/10 border-spotify/40 text-spotify"
+                                  : "bg-zinc-900/60 border-bento-border/50 text-zinc-500"
+                              }`}
+                            >
+                              <Icon className="w-3 h-3 flex-shrink-0" />
+                              <span className="truncate">{value}</span>
+                              {ok && <Check className="w-3 h-3 flex-shrink-0" />}
+                            </div>
+                          ))}
 
-                          {/* Album badge */}
-                          <div 
-                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[10px] font-mono font-bold uppercase truncate max-w-[150px] ${
-                              matchesAlbum 
-                                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" 
-                                : "bg-zinc-900/50 border-bento-border/40 text-zinc-500"
-                            }`}
-                            title={matchesAlbum ? "Album matches!" : "Wrong Album"}
-                          >
-                            <Disc className="w-3 h-3" />
-                            <span>{matchesAlbum ? "Album Match" : "Wrong Album"}</span>
-                          </div>
-
-                          {/* Genre badge */}
-                          <div 
-                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[10px] font-mono font-bold uppercase truncate max-w-[150px] ${
-                              matchesGenre 
-                                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" 
-                                : "bg-zinc-900/50 border-bento-border/40 text-zinc-500"
-                            }`}
-                            title={matchesGenre ? `Genre matches: ${guessedSong.genre}!` : `Wrong Genre: ${guessedSong.genre || "Unknown"}`}
-                          >
-                            <Tag className="w-3 h-3 flex-shrink-0" />
-                            <span className="truncate">
-                              {guessedSong.genre 
-                                ? (matchesGenre ? `${guessedSong.genre} Match` : `${guessedSong.genre} (Wrong)`) 
-                                : (matchesGenre ? "Genre Match" : "Wrong Genre")
-                              }
-                            </span>
-                          </div>
-
-                          {/* Release Year badge with arrows */}
-                          <div 
-                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[10px] font-mono font-bold uppercase ${yearBadgeColor}`}
+                          {/* Year, with an arrow pointing toward the answer */}
+                          <div
+                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-mono ${yearBadgeColor}`}
                             title={
-                              guessedSong.releaseYear === dailySong.releaseYear 
-                                ? "Year matches!" 
-                                : yearArrow === "🔼" 
-                                  ? "Target is newer" 
-                                  : "Target is older"
+                              guessedSong.releaseYear === dailySong.releaseYear
+                                ? "Same year as the answer"
+                                : yearArrow === "up"
+                                  ? "The answer is newer than this"
+                                  : "The answer is older than this"
                             }
                           >
                             <Calendar className="w-3 h-3" />
-                            <span>
-                              {yearText} {yearArrow && <span className="ml-0.5 inline-block animate-bounce">{yearArrow}</span>}
-                            </span>
+                            <span>{yearText}</span>
+                            {yearArrow === "up" && <ArrowUp className="w-3 h-3" />}
+                            {yearArrow === "down" && <ArrowDown className="w-3 h-3" />}
                           </div>
                         </div>
                       )}
-                    </div>
+                    </motion.div>
                   );
                 }
 
@@ -1016,12 +1027,12 @@ export default function SongleGame({
                 return (
                   <div 
                     key={idx} 
-                    className="flex items-center gap-3 px-4 py-3.5 rounded-2xl border border-bento-border/50 bg-bento-bg/30 text-zinc-600 text-sm"
+                    className="flex items-center gap-3 px-4 py-3.5 rounded-2xl border border-dashed border-bento-border/60 bg-bento-bg/20"
                   >
                     <span className="text-xs font-mono bg-bento-bg text-zinc-700 px-2 py-0.5 rounded-md border border-bento-border/50">
                       {idx + 1}
                     </span>
-                    <span className="italic font-normal text-[11px] text-zinc-600">Pending attempt...</span>
+                    <span className="sr-only">Guess {idx + 1}, not used yet</span>
                   </div>
                 );
               })}
@@ -1029,22 +1040,31 @@ export default function SongleGame({
 
             {/* If GameOver, Show primary Reveal Actions */}
             {gameOver && (
-              <div className="mt-6 w-full flex flex-col gap-4 animate-fadeIn">
+              <div className="mt-6 w-full flex flex-col gap-4">
                 <div className="bg-bento-bg border border-bento-border rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
                   <div className="flex items-center gap-4 w-full">
-                    <img 
-                      src={dailySong.artworkUrl} 
-                      alt={dailySong.title} 
-                      className="w-16 h-16 rounded-xl object-cover border border-bento-border shadow-lg flex-shrink-0"
+                    {/* The song resolving out of the snippet — the one authored moment */}
+                    <motion.img
+                      src={dailySong.artworkUrl}
+                      alt={`Album art for ${dailySong.title} by ${dailySong.artist}`}
+                      initial={{ filter: "blur(14px)", scale: 1.12, opacity: 0 }}
+                      animate={{ filter: "blur(0px)", scale: 1, opacity: 1 }}
+                      transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+                      className="w-20 h-20 rounded-xl object-cover border border-bento-border shadow-lg shadow-black/40 flex-shrink-0"
                       referrerPolicy="no-referrer"
                     />
-                    <div className="min-w-0">
-                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider uppercase mb-1 ${hasWon ? "bg-spotify/20 text-spotify" : "bg-rose-500/20 text-rose-400"}`}>
-                        {hasWon ? "CORRECT ANSWER" : "REVEALED ANSWER"}
-                      </span>
-                      <h4 className="text-base font-bold text-white truncate">{dailySong.title}</h4>
+                    <motion.div
+                      className="min-w-0"
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.45, delay: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                    >
+                      <p className={`text-[11px] font-mono mb-1 ${hasWon ? "text-spotify" : "text-rose-400"}`}>
+                        {hasWon ? "You got it" : "It was"}
+                      </p>
+                      <h4 className="text-lg font-bold text-white truncate font-display">{dailySong.title}</h4>
                       <p className="text-sm text-zinc-400 truncate mt-0.5">{dailySong.artist}</p>
-                    </div>
+                    </motion.div>
                   </div>
                   <div className="flex items-center gap-2 w-full md:w-auto">
                     <button
@@ -1074,111 +1094,83 @@ export default function SongleGame({
           {/* Subcard 1: Active Game Meta / Calendar */}
           <div className="bg-bento-card border border-bento-border rounded-3xl p-6 shadow-xl relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-spotify/5 rounded-full blur-2xl pointer-events-none" />
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-bento-border flex items-center justify-center">
-                  <Calendar className="text-spotify w-5 h-5" />
-                </div>
-                <div>
-                  <p className="text-[10px] text-zinc-400 font-mono tracking-wide uppercase">CHALLENGE CYCLE</p>
-                  <p className="text-sm font-semibold text-white mt-0.5 font-display">
-                    Daily Songle Routine
-                  </p>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-1.5 bg-spotify/10 text-spotify px-3 py-1.5 rounded-xl border border-spotify/20">
-                <TrendingUp className="w-4 h-4 animate-bounce" />
-                <span className="text-[11px] font-mono font-bold">STREAK: {stats.streak}</span>
-              </div>
-            </div>
-            
-            <div className="mt-5 pt-4 border-t border-bento-border/60">
-              <p className="text-xs text-zinc-400 font-mono">CURRENT TIME COORDINATES</p>
-              <p className="text-sm text-zinc-200 mt-1 font-semibold font-display">
-                {new Date().toLocaleDateString("en-US", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            <div className="relative">
+              <p className="text-[11px] text-zinc-500 font-mono">
+                {new Date().toLocaleDateString("en-US", { weekday: 'long' })}
               </p>
-              <p className="text-[11px] text-zinc-500 mt-1 font-mono">Auto-refreshed daily at UTC 00:00</p>
+              <p className="text-2xl font-bold text-white font-display leading-none mt-1.5">
+                {new Date().toLocaleDateString("en-US", { month: 'long', day: 'numeric' })}
+              </p>
+
+              <p className="text-[11px] text-zinc-500 font-mono mt-5 pt-4 border-t border-bento-border/60 leading-relaxed">
+                Everyone hears the same song today. A new one drops at midnight UTC.
+              </p>
             </div>
           </div>
 
           {/* Subcard 2: Cumulative Dashboard Stats Widget */}
-          <div className="bg-bento-card border border-bento-border rounded-3xl p-6 shadow-xl relative overflow-hidden flex flex-col">
-            <div className="flex items-center gap-2 mb-4 border-b border-bento-border/50 pb-2.5">
-              <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-bento-border flex items-center justify-center">
-                <Activity className="text-spotify w-4 h-4" />
-              </div>
-              <h4 className="text-sm font-bold text-white uppercase tracking-wider font-mono">My Stats</h4>
+          <div className="bg-bento-card border border-bento-border rounded-3xl p-6 shadow-xl flex flex-col">
+            <h4 className="text-sm font-bold text-white font-display">Your record</h4>
+
+            <div className="grid grid-cols-4 mt-5 divide-x divide-bento-border/60">
+              {[
+                { label: "Played", value: stats.played, tone: "text-white" },
+                {
+                  label: "Win rate",
+                  value: `${stats.played > 0 ? Math.round((stats.wins / stats.played) * 100) : 0}%`,
+                  tone: "text-spotify"
+                },
+                { label: "Streak", value: stats.streak, tone: "text-amber-500" },
+                { label: "Best", value: stats.maxStreak, tone: "text-white" }
+              ].map(({ label, value, tone }) => (
+                <div key={label} className="px-2 first:pl-0 last:pr-0">
+                  <p className={`text-2xl font-bold font-display tabular-nums leading-none ${tone}`}>{value}</p>
+                  <p className="text-[11px] text-zinc-500 font-mono mt-1.5">{label}</p>
+                </div>
+              ))}
             </div>
 
-            <div className="space-y-4">
-              {/* Accumulative Metrics Row */}
-              <div className="grid grid-cols-4 gap-1.5 w-full">
-                <div className="bg-zinc-950/60 p-2 rounded-xl border border-bento-border text-center">
-                  <p className="text-[8px] text-zinc-500 font-mono uppercase font-bold">Played</p>
-                  <p className="text-sm font-bold text-white mt-0.5 font-display">{stats.played}</p>
-                </div>
-                <div className="bg-zinc-950/60 p-2 rounded-xl border border-bento-border text-center">
-                  <p className="text-[8px] text-zinc-500 font-mono uppercase font-bold">Win rate</p>
-                  <p className="text-sm font-bold text-spotify mt-0.5 font-display">
-                    {stats.played > 0 ? Math.round((stats.wins / stats.played) * 100) : 0}%
-                  </p>
-                </div>
-                <div className="bg-zinc-950/60 p-2 rounded-xl border border-bento-border text-center">
-                  <p className="text-[8px] text-zinc-500 font-mono uppercase font-bold">Streak</p>
-                  <p className="text-sm font-bold text-amber-500 mt-0.5 font-display">{stats.streak}</p>
-                </div>
-                <div className="bg-zinc-950/60 p-2 rounded-xl border border-bento-border text-center">
-                  <p className="text-[8px] text-zinc-500 font-mono uppercase font-bold">Max</p>
-                  <p className="text-sm font-bold text-indigo-400 mt-0.5 font-display">{stats.maxStreak}</p>
-                </div>
-              </div>
+            <div className="mt-6 pt-5 border-t border-bento-border/60">
+              <p className="text-[11px] text-zinc-500 font-mono mb-3">Solved on guess</p>
+              <div className="flex flex-col gap-1.5">
+                {stats.distribution.map((val, idx) => {
+                  const max = Math.max(...stats.distribution, 1);
+                  const widthPercent = (val / max) * 100;
+                  const isJustSolved = guesses.length === idx + 1 && hasWon;
 
-              {/* Distribution chart inline */}
-              <div className="text-left bg-zinc-950/40 p-3.5 rounded-2xl border border-bento-border/60">
-                <p className="text-[9px] text-zinc-400 font-mono uppercase mb-2.5 tracking-wide font-bold">GUESS TIMELINE HISTOGRAM</p>
-                <div className="flex flex-col gap-1.5">
-                  {stats.distribution.map((val, idx) => {
-                    const max = Math.max(...stats.distribution, 1);
-                    const widthPercent = (val / max) * 100;
-                    const isCurrentAttempt = guesses.length === idx + 1 && hasWon;
-
-                    return (
-                      <div key={idx} className="flex items-center text-xs">
-                        <span className="w-3 font-mono text-zinc-500 mr-2 text-[9px]">{idx + 1}</span>
-                        <div className="flex-1 bg-zinc-950 h-4 rounded-lg overflow-hidden relative border border-bento-border/30">
-                          {widthPercent > 0 && (
-                            <div 
-                              style={{ width: `${widthPercent}%` }} 
-                              className={`h-full flex items-center justify-end px-2 text-[8px] font-mono font-bold transition-all ${
-                                isCurrentAttempt ? "bg-spotify text-black" : "bg-zinc-800 text-zinc-300"
-                              }`}
-                            >
-                              {val}
-                            </div>
-                          )}
-                        </div>
+                  return (
+                    <div key={idx} className="flex items-center gap-2.5 text-xs">
+                      <span className="w-2 font-mono text-zinc-600 text-[10px] tabular-nums">{idx + 1}</span>
+                      <div className="flex-1 h-4 relative border-b border-bento-border/50">
+                        {val > 0 && (
+                          <div
+                            style={{ width: `${Math.max(widthPercent, 10)}%` }}
+                            className={`h-full rounded-r-sm flex items-center justify-end px-1.5 text-[10px] font-mono font-bold transition-[width] duration-500 ease-out ${
+                              isJustSolved ? "bg-spotify text-black" : "bg-spotify/25 text-spotify"
+                            }`}
+                          >
+                            {val}
+                          </div>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
 
           {/* Subcard 3: Global Leaderboard Widget */}
-          <div className="bg-bento-card border border-bento-border rounded-3xl p-6 shadow-xl relative overflow-hidden flex flex-col min-h-[360px]">
-            <div className="flex justify-between items-center mb-4 border-b border-bento-border/50 pb-2.5">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-bento-border flex items-center justify-center">
-                  <Trophy className="text-amber-500 w-4 h-4" />
-                </div>
-                <h4 className="text-sm font-bold text-white uppercase tracking-wider font-mono">Global Leaderboard</h4>
-              </div>
+          <div className="bg-bento-card border border-bento-border rounded-3xl p-6 shadow-xl relative overflow-hidden flex flex-col">
+            <div className="flex justify-between items-baseline mb-5">
+              <h4 className="text-sm font-bold text-white font-display flex items-baseline gap-2">
+                Today's board
+                <Trophy className="text-amber-500 w-3.5 h-3.5 self-center" />
+              </h4>
 
-              <button 
+              <button
                 onClick={loadLeaderboardData}
-                className="text-[9px] font-mono text-zinc-500 hover:text-spotify underline transition cursor-pointer font-bold uppercase border-none bg-transparent"
+                className="text-[11px] font-mono text-zinc-500 hover:text-spotify transition-colors cursor-pointer border-none bg-transparent"
               >
                 Refresh
               </button>
@@ -1188,13 +1180,13 @@ export default function SongleGame({
               {isLeaderboardLoading ? (
                 <div className="flex-1 flex flex-col items-center justify-center py-12 space-y-2">
                   <div className="w-6 h-6 border-2 border-spotify border-t-transparent rounded-full animate-spin" />
-                  <p className="text-[10px] font-mono text-zinc-500">Querying global scores...</p>
+                  <p className="text-[10px] font-mono text-zinc-500">Loading scores</p>
                 </div>
               ) : leaderboard.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center py-12 text-center space-y-1">
                   <Users className="w-8 h-8 text-zinc-600" />
-                  <p className="text-xs font-semibold text-zinc-400">Leaderboard is empty</p>
-                  <p className="text-[10px] font-mono text-zinc-500">Be the first to submit a high score!</p>
+                  <p className="text-xs font-semibold text-zinc-400">No scores yet today</p>
+                  <p className="text-[10px] font-mono text-zinc-500">Solve the song to take the top spot.</p>
                 </div>
               ) : (
                 <div className="space-y-1.5 max-h-[250px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-zinc-850 scrollbar-track-transparent">
@@ -1208,10 +1200,10 @@ export default function SongleGame({
                     return (
                       <div 
                         key={entry.uid}
-                        className={`flex items-center justify-between p-2 rounded-xl border text-xs transition ${
-                          isSelf 
-                            ? "bg-spotify/5 border-spotify/30 text-spotify" 
-                            : "bg-zinc-950/40 border-bento-border/40 text-zinc-300"
+                        className={`flex items-center justify-between px-2.5 py-2 rounded-lg text-xs transition-colors ${
+                          isSelf
+                            ? "bg-spotify/10 text-spotify"
+                            : "text-zinc-300 hover:bg-zinc-900/60"
                         }`}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
@@ -1249,12 +1241,12 @@ export default function SongleGame({
               )}
 
               {!userProfile && (
-                <div className="mt-3 bg-zinc-950/60 p-2.5 rounded-xl border border-bento-border text-center">
-                  <button 
+                <div className="mt-4 pt-4 border-t border-bento-border/60">
+                  <button
                     onClick={onOpenAuth}
-                    className="text-[10px] text-spotify font-mono font-bold hover:underline cursor-pointer uppercase tracking-wider border-none bg-transparent"
+                    className="text-[11px] text-zinc-400 hover:text-spotify font-mono cursor-pointer border-none bg-transparent transition-colors"
                   >
-                    Sign in to claim your leaderboard spot!
+                    Sign in to keep your streak and take a spot here.
                   </button>
                 </div>
               )}
@@ -1288,11 +1280,13 @@ export default function SongleGame({
                   <Award className="w-8 h-8" />
                 </div>
                 
-                <h3 className="text-xl font-bold font-display">
-                  {hasWon ? "Splendid! You guessed it!" : "Good effort! Try again tomorrow"}
+                <h3 className="text-xl font-bold font-display px-8">
+                  {hasWon
+                    ? `Got it in ${guesses.length} ${guesses.length === 1 ? "guess" : "guesses"}`
+                    : "Out of guesses"}
                 </h3>
                 <p className="text-xs text-zinc-400 font-mono mt-1">
-                  {hasWon ? `SCORE: ${(6 - guesses.length) * 100 + speedBonus} points` : "Better luck next time"}
+                  {hasWon ? `${(6 - guesses.length) * 100 + speedBonus} points` : "The streak resets — back tomorrow."}
                 </p>
 
                 {/* Cover Art Card */}
@@ -1304,7 +1298,7 @@ export default function SongleGame({
                     referrerPolicy="no-referrer"
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="text-[10px] text-zinc-500 font-mono">SONG OF THE DAY</p>
+                    <p className="text-[10px] text-zinc-500 font-mono">Today's song</p>
                     <p className="font-bold text-white truncate text-base mt-0.5">{dailySong.title}</p>
                     <p className="text-xs text-zinc-400 truncate mt-0.5">{dailySong.artist} • <span className="italic text-zinc-500">{dailySong.album}</span></p>
                   </div>
@@ -1312,7 +1306,7 @@ export default function SongleGame({
 
                 {/* Score Emoji grid representation */}
                 <div className="bg-bento-bg border border-bento-border p-4 rounded-2xl w-full mb-6">
-                  <p className="text-[10px] text-zinc-400 font-mono mb-2.5 uppercase tracking-wide">GUESS TIMELINE</p>
+                  <p className="text-[10px] text-zinc-400 font-mono mb-2.5">Your six slots</p>
                   <div className="flex items-center justify-center gap-1.5 mb-3">
                     {Array.from({ length: 6 }).map((_, idx) => {
                       const g = guesses[idx];
@@ -1350,25 +1344,22 @@ export default function SongleGame({
                 </div>
 
                 {/* Cumulative Stats Grid */}
-                <div className="grid grid-cols-4 gap-2 w-full mb-6">
-                  <div className="bg-bento-bg p-3 rounded-2xl border border-bento-border text-center">
-                    <p className="text-[9px] text-zinc-500 font-mono uppercase">Played</p>
-                    <p className="text-base font-bold text-white mt-1 font-display">{stats.played}</p>
-                  </div>
-                  <div className="bg-bento-bg p-3 rounded-2xl border border-bento-border text-center">
-                    <p className="text-[9px] text-zinc-500 font-mono uppercase">Win %</p>
-                    <p className="text-base font-bold text-spotify mt-1 font-display">
-                      {stats.played > 0 ? Math.round((stats.wins / stats.played) * 100) : 0}%
-                    </p>
-                  </div>
-                  <div className="bg-bento-bg p-3 rounded-2xl border border-bento-border text-center">
-                    <p className="text-[9px] text-zinc-500 font-mono uppercase">Streak</p>
-                    <p className="text-base font-bold text-amber-500 mt-1 font-display">{stats.streak}</p>
-                  </div>
-                  <div className="bg-bento-bg p-3 rounded-2xl border border-bento-border text-center">
-                    <p className="text-[9px] text-zinc-500 font-mono uppercase">Max Streak</p>
-                    <p className="text-base font-bold text-indigo-400 mt-1 font-display">{stats.maxStreak}</p>
-                  </div>
+                <div className="grid grid-cols-4 w-full mb-6 divide-x divide-bento-border/60 text-left">
+                  {[
+                    { label: "Played", value: stats.played, tone: "text-white" },
+                    {
+                      label: "Win rate",
+                      value: `${stats.played > 0 ? Math.round((stats.wins / stats.played) * 100) : 0}%`,
+                      tone: "text-spotify"
+                    },
+                    { label: "Streak", value: stats.streak, tone: "text-amber-500" },
+                    { label: "Best", value: stats.maxStreak, tone: "text-white" }
+                  ].map(({ label, value, tone }) => (
+                    <div key={label} className="px-3 first:pl-0 last:pr-0">
+                      <p className={`text-xl font-bold font-display tabular-nums leading-none ${tone}`}>{value}</p>
+                      <p className="text-[11px] text-zinc-500 font-mono mt-1.5">{label}</p>
+                    </div>
+                  ))}
                 </div>
 
                 {/* Action CTA Buttons */}
@@ -1390,7 +1381,14 @@ export default function SongleGame({
                 </div>
 
                 {copiedText && (
-                  <p className="text-xs text-spotify font-mono mt-3 animate-bounce">{copiedText}</p>
+                  <motion.p
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                    className="text-xs text-spotify font-mono mt-3"
+                  >
+                    {copiedText}
+                  </motion.p>
                 )}
               </div>
             </motion.div>
@@ -1416,8 +1414,8 @@ export default function SongleGame({
                 <XCircle className="w-5 h-5" />
               </button>
 
-              <h3 className="text-lg font-bold flex items-center gap-2 text-white mb-4 font-display">
-                <Sparkles className="text-spotify w-5 h-5 animate-pulse" /> Songle Help & Clues
+              <h3 className="text-lg font-bold flex items-center gap-2 text-white mb-4 pr-10 font-display">
+                <Sparkles className="text-spotify w-5 h-5 flex-shrink-0" /> How to play
               </h3>
 
               {/* Tabs Switcher */}
@@ -1448,7 +1446,7 @@ export default function SongleGame({
                 {helpTab === "rules" ? (
                   <div className="space-y-4 text-sm text-zinc-300">
                     <p>
-                      Songle is the daily music discovery challenge. Guess the "Song of the Day" using progressively longer audio preview snippets.
+                      One song a day, the same one for everybody. You hear one second of it. Name it, or spend a guess to hear more.
                     </p>
                     <div className="bg-bento-bg p-3.5 rounded-2xl border border-bento-border font-mono text-xs space-y-2">
                       <div className="flex justify-between text-zinc-400"><span>Attempt 1:</span> <span className="text-spotify font-bold">1 second</span></div>
@@ -1459,16 +1457,16 @@ export default function SongleGame({
                       <div className="flex justify-between text-zinc-400"><span>Attempt 6:</span> <span className="text-rose-400 font-bold">16 seconds</span></div>
                     </div>
                     <p>
-                      Type artist or title names in the search bar. The autocomplete search queries the real <strong>iTunes API</strong> to guarantee correctly-formatted music entities!
+                      Search by artist or title — results come straight from iTunes, so you can only guess songs that actually exist.
                     </p>
                     <p>
-                      Succeeded guesses or skips unlock the next tier duration. Try to identify the song in the fewest attempts to maximize your <strong>Daily Score & Streak</strong>!
+                      A wrong guess or a skip buys you the next chunk of audio. Fewer guesses and less time on the clock means a higher score.
                     </p>
                   </div>
                 ) : (
                   <div className="space-y-3">
                     <p className="text-xs text-zinc-400">
-                      Clues unlock dynamically as you submit guesses. The more you guess, the more details are revealed to narrow down your search!
+                      Every guess you spend reveals one more detail about today's song.
                     </p>
                     
                     <div className="grid grid-cols-1 gap-2.5 text-xs mt-2">
@@ -1590,7 +1588,7 @@ export default function SongleGame({
                           </div>
                         </div>
                         {guesses.length >= 5 || gameOver ? (
-                          <Unlock className="w-3.5 h-3.5 text-emerald-400 animate-bounce flex-shrink-0" />
+                          <Unlock className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
                         ) : (
                           <Lock className="w-3.5 h-3.5 text-zinc-600 flex-shrink-0" />
                         )}
@@ -1604,7 +1602,7 @@ export default function SongleGame({
                 onClick={onCloseHowToPlay}
                 className="mt-6 w-full bg-spotify hover:bg-spotify-hover text-black font-bold py-3 rounded-2xl transition shadow-lg shadow-spotify/15 cursor-pointer font-display flex-shrink-0"
               >
-                Let's Play!
+                Got it
               </button>
             </motion.div>
           </div>
