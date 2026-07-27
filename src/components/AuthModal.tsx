@@ -5,12 +5,9 @@ import {
   Lock, 
   User, 
   Sparkles, 
-  Github, 
-  LogOut, 
+  Github,
   AlertCircle,
-  HelpCircle,
-  CheckCircle,
-  Link2
+  CheckCircle
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { 

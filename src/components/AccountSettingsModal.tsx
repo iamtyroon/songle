@@ -4,15 +4,11 @@ import {
   User, 
   Settings, 
   LogOut, 
-  Check, 
-  Sparkles, 
+  Check,
   AlertCircle,
   Mail,
   Lock,
   Link2,
-  Calendar,
-  Award,
-  TrendingUp,
   Flame,
   Trash2,
   KeyRound,
@@ -28,7 +24,7 @@ import {
   updateUserPassword, 
   deleteUserAccount 
 } from "../lib/firebase";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc } from "firebase/firestore";
 import { linkWithCredential, EmailAuthProvider } from "firebase/auth";
 
 interface AccountSettingsModalProps {

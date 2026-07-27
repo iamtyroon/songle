@@ -1,14 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { 
-  HelpCircle,
-  Sparkles,
-  User,
-  Settings,
-  LogIn,
-  Trophy,
-  Activity,
-  Flame
-} from "lucide-react";
+import { HelpCircle, LogIn, Flame } from "lucide-react";
 import { motion, MotionConfig } from "motion/react";
 import SongleGame from "./components/SongleGame";
 import AuthModal from "./components/AuthModal";
