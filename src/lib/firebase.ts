@@ -36,6 +36,7 @@ import {
   serverTimestamp
 } from "firebase/firestore";
 import firebaseConfig from "../../firebase-applet-config.json";
+import { advanceStreak, dayKey, effectiveStreak } from "./streak";
 
 // Initialize Firebase
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
@@ -71,6 +72,8 @@ export interface UserStats {
   maxStreak: number;
   distribution: number[];
   points: number;
+  /** Local day of the last finished game. Distinguishes a gap from a live run. */
+  lastPlayedDate?: string;
 }
 
 export interface UserProfile {
@@ -81,8 +84,6 @@ export interface UserProfile {
   providerId: string;
   createdAt: any;
   stats: UserStats;
-  loginStreak?: number;
-  lastLoginDate?: string;
 }
 
 const DEFAULT_STATS: UserStats = {
@@ -116,28 +117,6 @@ export async function syncUserProfile(user: FirebaseUser, customDisplayName?: st
 
   if (!isOffline && userSnap && userSnap.exists()) {
     const data = userSnap.data();
-    
-    // Compute/Update daily login streak
-    const todayStr = new Date().toLocaleDateString('en-CA');
-    const yesterdayDate = new Date();
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterdayStr = yesterdayDate.toLocaleDateString('en-CA');
-
-    let currentStreak = data.loginStreak || 0;
-    let lastLogin = data.lastLoginDate;
-
-    if (!lastLogin) {
-      currentStreak = 1;
-      lastLogin = todayStr;
-    } else if (lastLogin === todayStr) {
-      // already logged in today, keep same
-    } else if (lastLogin === yesterdayStr) {
-      currentStreak += 1;
-      lastLogin = todayStr;
-    } else {
-      currentStreak = 1;
-      lastLogin = todayStr;
-    }
 
     // Update basic user profile info in case they updated displayName/photoURL, but preserve stats
     const updatedProfile = {
@@ -146,17 +125,13 @@ export async function syncUserProfile(user: FirebaseUser, customDisplayName?: st
       email: user.email,
       photoURL: data.photoURL || photoURL,
       providerId: user.providerData[0]?.providerId || "anonymous",
-      stats: data.stats || DEFAULT_STATS,
-      loginStreak: currentStreak,
-      lastLoginDate: lastLogin
+      stats: data.stats || DEFAULT_STATS
     };
     try {
       await updateDoc(userRef, {
         displayName: updatedProfile.displayName,
         photoURL: updatedProfile.photoURL,
-        email: updatedProfile.email,
-        loginStreak: currentStreak,
-        lastLoginDate: lastLogin
+        email: updatedProfile.email
       });
     } catch (e) {
       console.warn("Failed to update user profile in Firestore (possibly offline)", e);
@@ -180,14 +155,14 @@ export async function syncUserProfile(user: FirebaseUser, customDisplayName?: st
           streak: parsed.streak || 0,
           maxStreak: parsed.maxStreak || 0,
           distribution: parsed.distribution || [0, 0, 0, 0, 0, 0],
-          points: calculatedPoints
+          points: calculatedPoints,
+          lastPlayedDate: parsed.lastPlayedDate
         };
       } catch (e) {
         console.error("Failed to parse local stats for migration", e);
       }
     }
 
-    const todayStr = new Date().toLocaleDateString('en-CA');
     const newProfile: UserProfile = {
       uid: user.uid,
       displayName,
@@ -195,9 +170,7 @@ export async function syncUserProfile(user: FirebaseUser, customDisplayName?: st
       photoURL,
       providerId: user.providerData[0]?.providerId || "anonymous",
       createdAt: isOffline ? null : serverTimestamp(),
-      stats: localStats,
-      loginStreak: 1,
-      lastLoginDate: todayStr
+      stats: localStats
     };
 
     if (!isOffline) {
@@ -362,7 +335,11 @@ export async function submitUserScore(
   // Compute new stats
   const nextPlayed = (currentStats.played || 0) + 1;
   const nextWins = hasWon ? (currentStats.wins || 0) + 1 : (currentStats.wins || 0);
-  const nextStreak = hasWon ? (currentStats.streak || 0) + 1 : 0;
+  const nextStreak = advanceStreak(
+    currentStats.streak || 0,
+    currentStats.lastPlayedDate,
+    hasWon
+  );
   const nextMaxStreak = Math.max(currentStats.maxStreak || 0, nextStreak);
   const nextDistribution = [...(currentStats.distribution || [0, 0, 0, 0, 0, 0])];
   if (hasWon && attempts >= 1 && attempts <= 6) {
@@ -379,7 +356,8 @@ export async function submitUserScore(
     streak: nextStreak,
     maxStreak: nextMaxStreak,
     distribution: nextDistribution,
-    points: nextPoints
+    points: nextPoints,
+    lastPlayedDate: dayKey()
   };
 
   // Sync to local storage for local stats integrity
@@ -446,7 +424,9 @@ export async function fetchLeaderboard(limitCount = 10): Promise<LeaderboardEntr
           points: data.stats.points || 0,
           wins: data.stats.wins || 0,
           played: data.stats.played || 0,
-          streak: data.stats.streak || 0
+          // Another player's stored streak is stale until they next play, so
+          // decay it here rather than showing a dead run as live.
+          streak: effectiveStreak(data.stats.streak, data.stats.lastPlayedDate)
         });
       }
     });

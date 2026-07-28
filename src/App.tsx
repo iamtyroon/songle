@@ -5,6 +5,7 @@ import SongleGame from "./components/SongleGame";
 import AuthModal from "./components/AuthModal";
 import AccountSettingsModal from "./components/AccountSettingsModal";
 import { auth, db, logoutUser, syncUserProfile, UserProfile } from "./lib/firebase";
+import { effectiveStreak } from "./lib/streak";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 
@@ -52,9 +53,7 @@ export default function App() {
             photoURL: data.photoURL,
             providerId: currentUser.providerData[0]?.providerId || "anonymous",
             createdAt: data.createdAt,
-            stats: data.stats,
-            loginStreak: data.loginStreak,
-            lastLoginDate: data.lastLoginDate
+            stats: data.stats
           } as UserProfile);
         }
       } catch (e) {
@@ -75,6 +74,11 @@ export default function App() {
       }
     }
   };
+
+  const headerStreak = effectiveStreak(
+    userProfile?.stats?.streak,
+    userProfile?.stats?.lastPlayedDate
+  );
 
   const handleLogout = async () => {
     try {
@@ -150,10 +154,13 @@ export default function App() {
                   <p className="font-bold truncate max-w-28 leading-tight">{userProfile.displayName}</p>
                   <p className="text-[9px] text-spotify font-mono font-semibold tracking-wide">{(userProfile.stats?.points) || 0} PTS</p>
                 </div>
-                {userProfile.loginStreak !== undefined && userProfile.loginStreak > 0 && (
-                  <div className="flex items-center gap-1 bg-orange-500/10 border border-orange-500/20 px-2 py-0.5 rounded-lg text-orange-500 text-[10px] font-mono font-bold">
+                {headerStreak > 0 && (
+                  <div
+                    className="flex items-center gap-1 bg-orange-500/10 border border-orange-500/20 px-2 py-0.5 rounded-lg text-orange-500 text-[10px] font-mono font-bold"
+                    title={`${headerStreak}-day winning streak`}
+                  >
                     <Flame className="w-3.5 h-3.5 fill-current" />
-                    <span>{userProfile.loginStreak}</span>
+                    <span>{headerStreak}</span>
                   </div>
                 )}
               </button>

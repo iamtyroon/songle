@@ -37,9 +37,15 @@ import {
   LeaderboardEntry,
   fetchUserTodayScore
 } from "../lib/firebase";
+import { advanceStreak, dayKey, effectiveStreak } from "../lib/streak";
 
 const ATTEMPT_DURATIONS = [1, 2, 4, 7, 11, 16];
 const MAX_DURATION = ATTEMPT_DURATIONS[ATTEMPT_DURATIONS.length - 1];
+
+// Shared links always point at production, never at localhost. The ?v=2 suffix
+// makes X treat this as a fresh URL so it re-crawls the social card instead of
+// serving the cached, image-less entry from before the og tags existed.
+const SHARE_URL = "https://play-songle.netlify.app/?v=2";
 
 // Fixed pseudo-waveform envelope. Deterministic so the track looks like the same
 // recording on every render instead of reshuffling under the playhead.
@@ -71,6 +77,7 @@ interface GameStats {
   streak: number;
   maxStreak: number;
   distribution: number[];
+  lastPlayedDate?: string;
 }
 
 interface SongleGameProps {
@@ -269,7 +276,8 @@ export default function SongleGame({
         wins: userProfile.stats.wins || 0,
         streak: userProfile.stats.streak || 0,
         maxStreak: userProfile.stats.maxStreak || 0,
-        distribution: userProfile.stats.distribution || [0, 0, 0, 0, 0, 0]
+        distribution: userProfile.stats.distribution || [0, 0, 0, 0, 0, 0],
+        lastPlayedDate: userProfile.stats.lastPlayedDate
       });
     } else {
       const savedStats = localStorage.getItem("songle_stats");
@@ -506,15 +514,17 @@ export default function SongleGame({
     const finalScore = baseScore + speedBonus;
 
     // Save and update stats
-    const updatedStats = {
+    const nextStreak = advanceStreak(stats.streak, stats.lastPlayedDate, true);
+    const updatedStats: GameStats = {
       played: stats.played + 1,
       wins: stats.wins + 1,
-      streak: stats.streak + 1,
-      maxStreak: Math.max(stats.maxStreak, stats.streak + 1),
+      streak: nextStreak,
+      maxStreak: Math.max(stats.maxStreak, nextStreak),
       distribution: stats.distribution.map((val, idx) => {
         if (idx === attemptsUsed - 1) return val + 1;
         return val;
-      })
+      }),
+      lastPlayedDate: dayKey()
     };
 
     setStats(updatedStats);
@@ -549,10 +559,11 @@ export default function SongleGame({
     setHasWon(false);
     pauseAudio();
 
-    const updatedStats = {
+    const updatedStats: GameStats = {
       ...stats,
       played: stats.played + 1,
-      streak: 0 // Reset streak
+      streak: 0, // a loss always breaks the run
+      lastPlayedDate: dayKey()
     };
 
     setStats(updatedStats);
@@ -603,7 +614,7 @@ export default function SongleGame({
     const attemptsText = hasWon ? `${guesses.length}/6` : "X/6";
     const scoreText = hasWon ? `Score: ${(6 - guesses.length) * 100 + speedBonus}` : "Score: 0";
     
-    const textToCopy = `Songle - Daily Music Discovery 🎵\nDate: ${new Date().toLocaleDateString()}\nAttempt: ${attemptsText}\n${emojiGrid}\n${scoreText}\nPlay here: ${window.location.href}`;
+    const textToCopy = `Songle - Daily Music Discovery 🎵\nDate: ${new Date().toLocaleDateString()}\nAttempt: ${attemptsText}\n${emojiGrid}\n${scoreText}\nPlay here: ${SHARE_URL}`;
     
     navigator.clipboard.writeText(textToCopy);
     setCopiedText("Copied results to clipboard!");
@@ -619,6 +630,10 @@ export default function SongleGame({
   // Progress calculations
   const totalPlayableTime = ATTEMPT_DURATIONS[currentAttempt];
   const progressPercent = Math.min((currentTime / totalPlayableTime) * 100, 100);
+
+  // Nothing writes to the record on a day the player never shows up, so the
+  // stored streak stays stale until their next game. Decay it for display.
+  const shownStreak = effectiveStreak(stats.streak, stats.lastPlayedDate);
 
   return (
     <div className="w-full max-w-6xl mx-auto py-2 text-white">
@@ -1118,7 +1133,7 @@ export default function SongleGame({
                   value: `${stats.played > 0 ? Math.round((stats.wins / stats.played) * 100) : 0}%`,
                   tone: "text-spotify"
                 },
-                { label: "Streak", value: stats.streak, tone: "text-amber-500" },
+                { label: "Streak", value: shownStreak, tone: "text-amber-500" },
                 { label: "Best", value: stats.maxStreak, tone: "text-white" }
               ].map(({ label, value, tone }) => (
                 <div key={label} className="px-2 first:pl-0 last:pr-0">
@@ -1223,7 +1238,7 @@ export default function SongleGame({
 
                         <div className="flex items-center gap-3">
                           {entry.streak > 0 && (
-                            <div className="flex items-center gap-0.5 text-orange-400 text-[10px] font-mono font-bold" title={`${entry.streak} Day streak`}>
+                            <div className="flex items-center gap-0.5 text-orange-400 text-[10px] font-mono font-bold" title={`${entry.streak}-day winning streak`}>
                               <Flame className="w-3 h-3 fill-current" />
                               <span>{entry.streak}</span>
                             </div>
@@ -1350,7 +1365,7 @@ export default function SongleGame({
                       value: `${stats.played > 0 ? Math.round((stats.wins / stats.played) * 100) : 0}%`,
                       tone: "text-spotify"
                     },
-                    { label: "Streak", value: stats.streak, tone: "text-amber-500" },
+                    { label: "Streak", value: shownStreak, tone: "text-amber-500" },
                     { label: "Best", value: stats.maxStreak, tone: "text-white" }
                   ].map(({ label, value, tone }) => (
                     <div key={label} className="px-3 first:pl-0 last:pr-0">

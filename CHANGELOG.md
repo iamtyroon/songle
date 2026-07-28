@@ -26,11 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stats and leaderboard cards flattened; nested card containers and icon-badge headers removed
 - Preset song list simplified to plain iTunes search terms; Spotify links now derive from iTunes results instead of hardcoded IDs
 - Dev server no longer hardcodes port 3000; `PORT` is honored when set
+- Shared results link now points at `https://play-songle.netlify.app/?v=2` instead of `window.location.href`, so sharing from localhost no longer produces a dead link and X re-crawls the social card
 - README screenshot recaptured against the current interface; feature list updated to describe the waveform timeline and guess feedback
 - Logo and screenshot moved into `public/` so the same files serve the app, the favicon, and the README (`scrnshot.png` is now `public/screenshot.png`)
 
 ### Removed
 
+- `loginStreak`, which counted days signed in rather than days played. It rendered as an orange flame in the header and account panel while the leaderboard's identical flame showed the win streak, so the same badge meant two different things. There is now one streak
 - Unused planning files `src/data/firebaseSchema.ts` and `src/data/nextjsStructure.ts`
 - Unused `fetchSongsFromiTunes` helper and dead Firebase imports
 - Unused dependencies: `express`, `dotenv`, `@google/genai`, `tsx`, `@types/express`, `esbuild`, `autoprefixer`
@@ -38,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Streaks survived skipped days.** The streak only reset on a loss, so winning Monday, vanishing until Friday, then winning read as a 2-day streak. A streak is now consecutive days finished with a win, breaking on a loss *or* a missed day. Because nothing is written on a day the player never shows up, the stored value is also decayed at read time instead of being shown as live — including for other players on the leaderboard
 - Broken "Play on Spotify" links caused by invented Spotify track IDs in presets
 - Guess-distribution rows with a count of zero rendered a visible bar stub
 - Hint row overlapped its own text below 400px; help modal title collided with the close button at 320px

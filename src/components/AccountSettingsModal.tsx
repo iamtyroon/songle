@@ -24,6 +24,7 @@ import {
   updateUserPassword, 
   deleteUserAccount 
 } from "../lib/firebase";
+import { effectiveStreak } from "../lib/streak";
 import { doc, updateDoc } from "firebase/firestore";
 import { linkWithCredential, EmailAuthProvider } from "firebase/auth";
 
@@ -86,6 +87,11 @@ export default function AccountSettingsModal({
   }, [userProfile, isOpen]);
 
   if (!isOpen || !userProfile) return null;
+
+  const winStreak = effectiveStreak(
+    userProfile.stats?.streak,
+    userProfile.stats?.lastPlayedDate
+  );
 
   const currentAvatarSeed = (avatarUrl: string) => {
     if (!avatarUrl) return "";
@@ -392,10 +398,10 @@ export default function AccountSettingsModal({
                   <span className="text-[9px] font-mono font-bold tracking-widest bg-spotify/15 text-spotify px-2 py-0.5 rounded-full uppercase">
                     {userProfile.providerId === "anonymous" ? "Guest Account" : `${userProfile.providerId.replace(".com", "")} Member`}
                   </span>
-                  {userProfile.loginStreak !== undefined && userProfile.loginStreak > 0 && (
+                  {winStreak > 0 && (
                     <span className="flex items-center gap-1 text-[9px] font-mono font-bold bg-orange-500/15 border border-orange-500/30 text-orange-400 px-2 py-0.5 rounded-full">
                       <Flame className="w-3 h-3 fill-current" />
-                      <span>{userProfile.loginStreak} DAY STREAK</span>
+                      <span>{winStreak} DAY WIN STREAK</span>
                     </span>
                   )}
                 </div>
