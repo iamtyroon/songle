@@ -47,11 +47,14 @@ service cloud.firestore {
       match /players/{userId} {
         allow read: if isAuthenticated();
         // Own doc only, and the total can't exceed 600 per song in the set.
-        allow write: if isOwner(userId)
+        allow create, update: if isOwner(userId)
                      && request.resource.data.totalScore is number
                      && request.resource.data.totalScore >= 0
                      && request.resource.data.totalScore
                         <= 600 * get(/databases/$(database)/documents/rooms/$(code)).data.songs.size();
+        // Leaving a room removes your own scorecard. Delete carries no
+        // request.resource, so it can't ride along on the write rule above.
+        allow delete: if isOwner(userId);
       }
     }
   }
