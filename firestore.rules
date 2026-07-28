@@ -34,5 +34,25 @@ service cloud.firestore {
       allow update: if false; // Scores are immutable once submitted
       allow delete: if false;
     }
+
+    // Challenge rooms: host owns the room, players own their own scorecard
+    match /rooms/{code} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(request.resource.data.hostUid)
+                    && request.resource.data.songs.size() > 0
+                    && request.resource.data.songs.size() <= 50;
+      allow update: if isOwner(resource.data.hostUid);
+      allow delete: if isOwner(resource.data.hostUid);
+
+      match /players/{userId} {
+        allow read: if isAuthenticated();
+        // Own doc only, and the total can't exceed 600 per song in the set.
+        allow write: if isOwner(userId)
+                     && request.resource.data.totalScore is number
+                     && request.resource.data.totalScore >= 0
+                     && request.resource.data.totalScore
+                        <= 600 * get(/databases/$(database)/documents/rooms/$(code)).data.songs.size();
+      }
+    }
   }
 }

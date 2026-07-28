@@ -38,6 +38,7 @@ import {
   fetchUserTodayScore
 } from "../lib/firebase";
 import { advanceStreak, dayKey, effectiveStreak } from "../lib/streak";
+import type { RoomPlayer, RoomResult } from "../lib/rooms";
 
 const ATTEMPT_DURATIONS = [1, 2, 4, 7, 11, 16];
 const MAX_DURATION = ATTEMPT_DURATIONS[ATTEMPT_DURATIONS.length - 1];
@@ -80,6 +81,17 @@ interface GameStats {
   lastPlayedDate?: string;
 }
 
+/** Present only in room mode. Swaps the song source and the score destination. */
+export interface RoomMode {
+  name: string;
+  songs: Song[];
+  index: number;
+  players: RoomPlayer[];
+  onResult: (result: RoomResult) => void;
+  onNext: () => void;
+  onExit: () => void;
+}
+
 interface SongleGameProps {
   userProfile: UserProfile | null;
   onScoreSubmitted?: () => void;
@@ -87,15 +99,17 @@ interface SongleGameProps {
   showHowToPlay?: boolean;
   onOpenHowToPlay?: () => void;
   onCloseHowToPlay?: () => void;
+  room?: RoomMode;
 }
 
-export default function SongleGame({ 
-  userProfile, 
-  onScoreSubmitted, 
+export default function SongleGame({
+  userProfile,
+  onScoreSubmitted,
   onOpenAuth,
   showHowToPlay = false,
   onOpenHowToPlay,
-  onCloseHowToPlay
+  onCloseHowToPlay,
+  room
 }: SongleGameProps) {
   // State management
   const [songList, setSongList] = useState<Song[]>(FALLBACK_SONGS);
@@ -139,8 +153,16 @@ export default function SongleGame({
     distribution: [0, 0, 0, 0, 0, 0]
   });
 
-  // Load popular songs on mount
+  // Load popular songs on mount. In room mode the host already picked the set.
   useEffect(() => {
+    if (room) {
+      setSongList(room.songs);
+      setDailySong(room.songs[room.index]);
+      setSelectedSongIndex(room.index);
+      setIsLoading(false);
+      return;
+    }
+
     async function loadInitialSongs() {
       setIsLoading(true);
       try {
@@ -188,11 +210,12 @@ export default function SongleGame({
     }
     
     loadInitialSongs();
-  }, []);
+  }, [room?.index, room?.songs]);
 
   // Lock daily play once a day (State Restoration and Limit Verification)
   useEffect(() => {
     async function checkDailyPlayState() {
+      if (room) return; // room songs have their own once-per-song lock in Firestore
       if (!dailySong || songList.length === 0) return;
       
       const dateIndex = new Date().getDate() % songList.length;
@@ -513,6 +536,12 @@ export default function SongleGame({
     const baseScore = (6 - attemptsUsed) * 100;
     const finalScore = baseScore + speedBonus;
 
+    // Room scores stay in the room: no global stats, no streak, no daily lock.
+    if (room) {
+      room.onResult({ songId: dailySong.id, score: finalScore, attempts: attemptsUsed, hasWon: true });
+      return; // the reveal bar carries the Next control; the daily stats modal doesn't apply
+    }
+
     // Save and update stats
     const nextStreak = advanceStreak(stats.streak, stats.lastPlayedDate, true);
     const updatedStats: GameStats = {
@@ -558,6 +587,11 @@ export default function SongleGame({
     setGameOver(true);
     setHasWon(false);
     pauseAudio();
+
+    if (room) {
+      room.onResult({ songId: dailySong.id, score: 0, attempts: finalGuesses.length, hasWon: false });
+      return;
+    }
 
     const updatedStats: GameStats = {
       ...stats,
@@ -634,6 +668,21 @@ export default function SongleGame({
   // Nothing writes to the record on a day the player never shows up, so the
   // stored streak stays stale until their next game. Decay it for display.
   const shownStreak = effectiveStreak(stats.streak, stats.lastPlayedDate);
+
+  // The room board reuses the global board's markup; only the source differs.
+  const boardEntries: LeaderboardEntry[] = room
+    ? room.players.map((p) => ({
+        uid: p.uid,
+        displayName: p.displayName,
+        photoURL: p.photoURL,
+        points: p.totalScore,
+        wins: p.results.filter((r) => r.hasWon).length,
+        played: p.results.length,
+        streak: 0
+      }))
+    : leaderboard;
+
+  const isLastRoomSong = !!room && room.index >= room.songs.length - 1;
 
   return (
     <div className="w-full max-w-6xl mx-auto py-2 text-white">
@@ -1080,12 +1129,25 @@ export default function SongleGame({
                     </motion.div>
                   </div>
                   <div className="flex items-center gap-2 w-full md:w-auto">
-                    <button
-                      onClick={() => setShowResultsModal(true)}
-                      className="flex-1 md:flex-none bg-spotify text-black hover:bg-spotify-hover px-4 py-2.5 rounded-xl font-bold text-sm transition-all shadow-md shadow-spotify/10 flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer font-display"
-                    >
-                      <Award className="w-4 h-4" /> View Stats
-                    </button>
+                    {room ? (
+                      <button
+                        onClick={isLastRoomSong ? room.onExit : room.onNext}
+                        className="flex-1 md:flex-none bg-spotify text-black hover:bg-spotify-hover px-4 py-2.5 rounded-xl font-bold text-sm transition-all shadow-md shadow-spotify/10 flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer font-display"
+                      >
+                        {isLastRoomSong ? (
+                          <><Trophy className="w-4 h-4" /> Finish room</>
+                        ) : (
+                          <><ChevronRight className="w-4 h-4" /> Next song</>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setShowResultsModal(true)}
+                        className="flex-1 md:flex-none bg-spotify text-black hover:bg-spotify-hover px-4 py-2.5 rounded-xl font-bold text-sm transition-all shadow-md shadow-spotify/10 flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer font-display"
+                      >
+                        <Award className="w-4 h-4" /> View Stats
+                      </button>
+                    )}
                     <a
                       href={dailySong.spotifyUrl}
                       target="_blank"
@@ -1107,22 +1169,46 @@ export default function SongleGame({
           {/* Subcard 1: Active Game Meta / Calendar */}
           <div className="bg-bento-card border border-bento-border rounded-3xl p-6 shadow-xl relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-spotify/5 rounded-full blur-2xl pointer-events-none" />
-            <div className="relative">
-              <p className="text-[11px] text-zinc-500 font-mono">
-                {new Date().toLocaleDateString("en-US", { weekday: 'long' })}
-              </p>
-              <p className="text-2xl font-bold text-white font-display leading-none mt-1.5">
-                {new Date().toLocaleDateString("en-US", { month: 'long', day: 'numeric' })}
-              </p>
+            {room ? (
+              <div className="relative">
+                <p className="text-[11px] text-zinc-500 font-mono">Challenge room</p>
+                <p className="text-2xl font-bold text-white font-display leading-none mt-1.5 truncate">
+                  {room.name}
+                </p>
+                <p className="text-[11px] text-zinc-400 font-mono mt-3">
+                  Song {room.index + 1} of {room.songs.length}
+                </p>
+                <div className="h-1.5 bg-bento-bg rounded-full mt-2 overflow-hidden">
+                  <div
+                    className="h-full bg-spotify rounded-full transition-[width] duration-500"
+                    style={{ width: `${((room.index + 1) / room.songs.length) * 100}%` }}
+                  />
+                </div>
+                <button
+                  onClick={room.onExit}
+                  className="text-[11px] text-zinc-500 hover:text-spotify font-mono mt-5 pt-4 border-t border-bento-border/60 w-full text-left cursor-pointer bg-transparent border-x-0 border-b-0 transition-colors"
+                >
+                  Leave room
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                <p className="text-[11px] text-zinc-500 font-mono">
+                  {new Date().toLocaleDateString("en-US", { weekday: 'long' })}
+                </p>
+                <p className="text-2xl font-bold text-white font-display leading-none mt-1.5">
+                  {new Date().toLocaleDateString("en-US", { month: 'long', day: 'numeric' })}
+                </p>
 
-              <p className="text-[11px] text-zinc-500 font-mono mt-5 pt-4 border-t border-bento-border/60 leading-relaxed">
-                Everyone hears the same song today. A new one drops at midnight UTC.
-              </p>
-            </div>
+                <p className="text-[11px] text-zinc-500 font-mono mt-5 pt-4 border-t border-bento-border/60 leading-relaxed">
+                  Everyone hears the same song today. A new one drops at midnight UTC.
+                </p>
+              </div>
+            )}
           </div>
 
-          {/* Subcard 2: Cumulative Dashboard Stats Widget */}
-          <div className="bg-bento-card border border-bento-border rounded-3xl p-6 shadow-xl flex flex-col">
+          {/* Subcard 2: Cumulative Dashboard Stats Widget (daily only — room scores don't touch it) */}
+          <div className={`bg-bento-card border border-bento-border rounded-3xl p-6 shadow-xl flex-col ${room ? "hidden" : "flex"}`}>
             <h4 className="text-sm font-bold text-white font-display">Your record</h4>
 
             <div className="grid grid-cols-4 mt-5 divide-x divide-bento-border/60">
@@ -1177,33 +1263,39 @@ export default function SongleGame({
           <div className="bg-bento-card border border-bento-border rounded-3xl p-6 shadow-xl relative overflow-hidden flex flex-col">
             <div className="flex justify-between items-baseline mb-5">
               <h4 className="text-sm font-bold text-white font-display flex items-baseline gap-2">
-                Today's board
+                {room ? "Room board" : "Today's board"}
                 <Trophy className="text-amber-500 w-3.5 h-3.5 self-center" />
               </h4>
 
-              <button
-                onClick={loadLeaderboardData}
-                className="text-[11px] font-mono text-zinc-500 hover:text-spotify transition-colors cursor-pointer border-none bg-transparent"
-              >
-                Refresh
-              </button>
+              {room ? (
+                <span className="text-[11px] font-mono text-zinc-500">Live</span>
+              ) : (
+                <button
+                  onClick={loadLeaderboardData}
+                  className="text-[11px] font-mono text-zinc-500 hover:text-spotify transition-colors cursor-pointer border-none bg-transparent"
+                >
+                  Refresh
+                </button>
+              )}
             </div>
 
             <div className="flex-1 flex flex-col justify-between">
-              {isLeaderboardLoading ? (
+              {isLeaderboardLoading && !room ? (
                 <div className="flex-1 flex flex-col items-center justify-center py-12 space-y-2">
                   <div className="w-6 h-6 border-2 border-spotify border-t-transparent rounded-full animate-spin" />
                   <p className="text-[10px] font-mono text-zinc-500">Loading scores</p>
                 </div>
-              ) : leaderboard.length === 0 ? (
+              ) : boardEntries.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center py-12 text-center space-y-1">
                   <Users className="w-8 h-8 text-zinc-600" />
-                  <p className="text-xs font-semibold text-zinc-400">No scores yet today</p>
+                  <p className="text-xs font-semibold text-zinc-400">
+                    {room ? "Nobody has scored yet" : "No scores yet today"}
+                  </p>
                   <p className="text-[10px] font-mono text-zinc-500">Solve the song to take the top spot.</p>
                 </div>
               ) : (
                 <div className="space-y-1.5 max-h-[250px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-zinc-850 scrollbar-track-transparent">
-                  {leaderboard.map((entry, idx) => {
+                  {boardEntries.map((entry, idx) => {
                     const isSelf = userProfile?.uid === entry.uid;
                     let rankBadge = "text-zinc-400 font-mono";
                     if (idx === 0) rankBadge = "text-amber-400 font-bold";

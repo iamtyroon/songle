@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { HelpCircle, LogIn, Flame } from "lucide-react";
+import { HelpCircle, LogIn, Flame, Users } from "lucide-react";
 import { motion, MotionConfig } from "motion/react";
 import SongleGame from "./components/SongleGame";
 import AuthModal from "./components/AuthModal";
 import AccountSettingsModal from "./components/AccountSettingsModal";
+import RoomView from "./components/RoomView";
 import { auth, db, logoutUser, syncUserProfile, UserProfile } from "./lib/firebase";
 import { effectiveStreak } from "./lib/streak";
 import { onAuthStateChanged } from "firebase/auth";
@@ -16,6 +17,10 @@ export default function App() {
   
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
+
+  // ?room=CODE deep-links straight into the rooms tab with the code prefilled.
+  const initialRoomCode = new URLSearchParams(window.location.search).get("room") || undefined;
+  const [inRooms, setInRooms] = useState<boolean>(!!initialRoomCode);
 
   // Monitor auth state changes
   useEffect(() => {
@@ -128,6 +133,13 @@ export default function App() {
           {/* Actions & Auth status button */}
           <div className="flex items-center gap-2.5">
             <button
+              onClick={() => setInRooms((v) => !v)}
+              className="text-zinc-400 hover:text-white bg-bento-card hover:bg-zinc-900 px-4 py-2.5 rounded-xl border border-bento-border transition flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
+            >
+              <Users className="w-4 h-4 text-spotify" /> {inRooms ? "Daily" : "Rooms"}
+            </button>
+
+            <button
               onClick={() => setShowHowToPlay(true)}
               className="text-zinc-400 hover:text-white bg-bento-card hover:bg-zinc-900 px-4 py-2.5 rounded-xl border border-bento-border transition flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
             >
@@ -185,14 +197,26 @@ export default function App() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25 }}
         >
-          <SongleGame 
-            userProfile={userProfile} 
-            onScoreSubmitted={reloadProfile}
-            onOpenAuth={() => setShowAuthModal(true)}
-            showHowToPlay={showHowToPlay}
-            onOpenHowToPlay={() => setShowHowToPlay(true)}
-            onCloseHowToPlay={() => setShowHowToPlay(false)}
-          />
+          {inRooms ? (
+            <RoomView
+              userProfile={userProfile}
+              onOpenAuth={() => setShowAuthModal(true)}
+              onExit={() => setInRooms(false)}
+              showHowToPlay={showHowToPlay}
+              onOpenHowToPlay={() => setShowHowToPlay(true)}
+              onCloseHowToPlay={() => setShowHowToPlay(false)}
+              initialCode={initialRoomCode}
+            />
+          ) : (
+            <SongleGame
+              userProfile={userProfile}
+              onScoreSubmitted={reloadProfile}
+              onOpenAuth={() => setShowAuthModal(true)}
+              showHowToPlay={showHowToPlay}
+              onOpenHowToPlay={() => setShowHowToPlay(true)}
+              onCloseHowToPlay={() => setShowHowToPlay(false)}
+            />
+          )}
         </motion.div>
       </main>
 
@@ -221,6 +245,8 @@ export default function App() {
             <p className="mt-1 text-[11px] text-zinc-500">One song a day. Six guesses. Six seconds of rope.</p>
           </div>
           <div className="flex items-center gap-4 text-[11px] text-zinc-500">
+            <a href="/privacy-policy" className="hover:text-spotify transition-colors">Privacy</a>
+            <a href="/tos" className="hover:text-spotify transition-colors">Terms</a>
             <span>Powered by iTunes Search API</span>
           </div>
         </div>
