@@ -2,5 +2,5 @@
   "name": "Songle",
   "description": "A daily music guessing game. Hear one second of today's song and name it; every wrong guess unlocks more audio, up to sixteen seconds. Also has host-run challenge rooms with their own leaderboard.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": []
 }
