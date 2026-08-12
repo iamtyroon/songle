@@ -29,7 +29,7 @@ import {
   ArrowDown
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { Song, searchiTunesSongs, getOrCreateDailySong, FALLBACK_SONGS } from "../data/songs";
+import { Song, searchiTunesSongs, PRESET_SONG_QUERIES, FALLBACK_SONGS } from "../data/songs";
 import { 
   UserProfile, 
   submitUserScore, 
@@ -128,7 +128,6 @@ export default function SongleGame({
   const [gameOver, setGameOver] = useState<boolean>(false);
   const [hasWon, setHasWon] = useState<boolean>(false);
   const [showResultsModal, setShowResultsModal] = useState<boolean>(false);
-  const [resultScore, setResultScore] = useState<number | null>(null);
   const [shakeCard, setShakeCard] = useState<boolean>(false);
   const [copiedText, setCopiedText] = useState<string>("");
   const [speedBonus, setSpeedBonus] = useState<number>(100);
@@ -142,10 +141,6 @@ export default function SongleGame({
   // Audio reference
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const timerRef = useRef<number | null>(null);
-  // React state updates are asynchronous; refs prevent rapid double-clicks
-  // from recording multiple guesses before the UI re-renders.
-  const guessLockedRef = useRef(false);
-  const gameFinishedRef = useRef(false);
   const speedTimerRef = useRef<number | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
@@ -171,32 +166,51 @@ export default function SongleGame({
     async function loadInitialSongs() {
       setIsLoading(true);
       try {
-        const selected = await getOrCreateDailySong();
-        if (selected) {
-          // A single chart entry is resolved each day; this is deliberately not
-          // a small bundled preset rotation.
-          setSongList([selected]);
-          setDailySong(selected);
-          setSelectedSongIndex(0);
+        // We'll search for preset queries and compile them
+        const loaded: Song[] = [];
+        
+        // Fetch 5 songs from iTunes search dynamically to make it organic!
+        // To be fast, we'll run search queries in parallel
+        const promises = PRESET_SONG_QUERIES.slice(0, 8).map(async (term) => {
+          try {
+            const results = await searchiTunesSongs(term);
+            if (results && results.length > 0) {
+              return results[0];
+            }
+          } catch (e) {
+            console.error("Single query failed", e);
+          }
+          return null;
+        });
+
+        const resolved = await Promise.all(promises);
+        resolved.forEach((s) => {
+          if (s) loaded.push(s);
+        });
+
+        if (loaded.length > 0) {
+          setSongList(loaded);
+          // Pick daily song based on the date
+          const dateIndex = new Date().getDate() % loaded.length;
+          setDailySong(loaded[dateIndex]);
+          setSelectedSongIndex(dateIndex);
         } else {
           setSongList(FALLBACK_SONGS);
-          const dateIndex = new Date().getUTCDate() % FALLBACK_SONGS.length;
-          setDailySong(FALLBACK_SONGS[dateIndex]);
-          setSelectedSongIndex(dateIndex);
+          setDailySong(FALLBACK_SONGS[0]);
+          setSelectedSongIndex(0);
         }
       } catch (err) {
         console.error("Failed to load iTunes songs, falling back to static", err);
         setSongList(FALLBACK_SONGS);
-        const dateIndex = new Date().getUTCDate() % FALLBACK_SONGS.length;
-        setDailySong(FALLBACK_SONGS[dateIndex]);
-        setSelectedSongIndex(dateIndex);
+        setDailySong(FALLBACK_SONGS[0]);
+        setSelectedSongIndex(0);
       } finally {
         setIsLoading(false);
       }
     }
     
     loadInitialSongs();
-  }, [room?.index, room?.songs, userProfile?.uid]);
+  }, [room?.index, room?.songs]);
 
   // Lock daily play once a day (State Restoration and Limit Verification)
   useEffect(() => {
@@ -204,7 +218,7 @@ export default function SongleGame({
       if (room) return; // room songs have their own once-per-song lock in Firestore
       if (!dailySong || songList.length === 0) return;
       
-      const dateIndex = room ? room.index : 0;
+      const dateIndex = new Date().getDate() % songList.length;
       const isDailySong = selectedSongIndex === dateIndex;
       
       if (!isDailySong) {
@@ -225,11 +239,10 @@ export default function SongleGame({
       if (savedLocalState) {
         try {
           const parsed = JSON.parse(savedLocalState);
-          if (parsed && parsed.songId === dailySong.id && Array.isArray(parsed.guesses)) {
+          if (parsed && Array.isArray(parsed.guesses)) {
             setGuesses(parsed.guesses);
             setGameOver(parsed.gameOver);
             setHasWon(parsed.hasWon);
-            setResultScore(typeof parsed.score === "number" ? parsed.score : null);
             setCurrentAttempt(parsed.guesses.length);
             setDailyHasPlayed(true);
             return; // Successfully restored from local storage
@@ -244,13 +257,12 @@ export default function SongleGame({
         setIsDailyRestoring(true);
         try {
           const scoreData = await fetchUserTodayScore();
-          if (scoreData && scoreData.songTitle === dailySong.title && scoreData.songArtist === dailySong.artist) {
+          if (scoreData) {
             // Restore state from Firestore score record
             const restoredGuesses = scoreData.guesses || [];
             setGuesses(restoredGuesses);
             setGameOver(true);
             setHasWon(scoreData.hasWon);
-            setResultScore(typeof scoreData.score === "number" ? scoreData.score : null);
             setCurrentAttempt(restoredGuesses.length);
             setDailyHasPlayed(true);
             
@@ -258,18 +270,10 @@ export default function SongleGame({
             localStorage.setItem(localStateKey, JSON.stringify({
               guesses: restoredGuesses,
               gameOver: true,
-              hasWon: scoreData.hasWon,
-              score: scoreData.score,
-              songId: dailySong.id
+              hasWon: scoreData.hasWon
             }));
           } else {
             setDailyHasPlayed(false);
-            setGuesses([]);
-            setGameOver(false);
-            setHasWon(false);
-            setResultScore(null);
-            setCurrentAttempt(0);
-            gameFinishedRef.current = false;
           }
         } catch (err) {
           console.error("Failed to fetch user score for daily restoration", err);
@@ -278,12 +282,6 @@ export default function SongleGame({
         }
       } else {
         setDailyHasPlayed(false);
-        setGuesses([]);
-        setGameOver(false);
-        setHasWon(false);
-        setResultScore(null);
-        setCurrentAttempt(0);
-        gameFinishedRef.current = false;
       }
     }
     
@@ -475,9 +473,6 @@ export default function SongleGame({
 
   // Skip Attempt
   const handleSkip = () => {
-    if (isDailyRestoring || gameOver || gameFinishedRef.current || guessLockedRef.current) return;
-    guessLockedRef.current = true;
-    queueMicrotask(() => { guessLockedRef.current = false; });
     const newGuesses = [...guesses, { text: "Skipped", isCorrect: false, isSkip: true }];
     setGuesses(newGuesses);
     setSearchQuery("");
@@ -495,9 +490,6 @@ export default function SongleGame({
 
   // Submit Guess
   const handleGuess = (song: Song) => {
-    if (isDailyRestoring || gameOver || gameFinishedRef.current || guessLockedRef.current) return;
-    guessLockedRef.current = true;
-    queueMicrotask(() => { guessLockedRef.current = false; });
     const isCorrect = song.id === dailySong.id || 
                       (song.title.toLowerCase().trim() === dailySong.title.toLowerCase().trim() && 
                        song.artist.toLowerCase().trim() === dailySong.artist.toLowerCase().trim());
@@ -535,8 +527,6 @@ export default function SongleGame({
   };
 
   const triggerWin = async (finalGuesses: Guess[]) => {
-    if (gameFinishedRef.current) return;
-    gameFinishedRef.current = true;
     setGameOver(true);
     setHasWon(true);
     pauseAudio();
@@ -545,7 +535,6 @@ export default function SongleGame({
     const attemptsUsed = finalGuesses.length;
     const baseScore = (6 - attemptsUsed) * 100;
     const finalScore = baseScore + speedBonus;
-    setResultScore(finalScore);
 
     // Room scores stay in the room: no global stats, no streak, no daily lock.
     if (room) {
@@ -571,15 +560,13 @@ export default function SongleGame({
     localStorage.setItem("songle_stats", JSON.stringify(updatedStats));
 
     // Save daily play state to local storage to lock play if it's the daily song
-    const dateIndex = room ? room.index : 0;
+    const dateIndex = new Date().getDate() % songList.length;
     if (selectedSongIndex === dateIndex) {
       const dateStr = new Date().toISOString().split("T")[0];
       localStorage.setItem(`songle_daily_state_${dateStr}`, JSON.stringify({
         guesses: finalGuesses,
         gameOver: true,
-        hasWon: true,
-        score: finalScore,
-        songId: dailySong.id
+        hasWon: true
       }));
       setDailyHasPlayed(true);
     }
@@ -597,11 +584,8 @@ export default function SongleGame({
   };
 
   const triggerLoss = async (finalGuesses: Guess[]) => {
-    if (gameFinishedRef.current) return;
-    gameFinishedRef.current = true;
     setGameOver(true);
     setHasWon(false);
-    setResultScore(0);
     pauseAudio();
 
     if (room) {
@@ -620,15 +604,13 @@ export default function SongleGame({
     localStorage.setItem("songle_stats", JSON.stringify(updatedStats));
 
     // Save daily play state to local storage to lock play if it's the daily song
-    const dateIndex = room ? room.index : 0;
+    const dateIndex = new Date().getDate() % songList.length;
     if (selectedSongIndex === dateIndex) {
       const dateStr = new Date().toISOString().split("T")[0];
       localStorage.setItem(`songle_daily_state_${dateStr}`, JSON.stringify({
         guesses: finalGuesses,
         gameOver: true,
-        hasWon: false,
-        score: 0,
-        songId: dailySong.id
+        hasWon: false
       }));
       setDailyHasPlayed(true);
     }
@@ -664,7 +646,7 @@ export default function SongleGame({
   const handleShare = () => {
     const emojiGrid = generateShareGrid();
     const attemptsText = hasWon ? `${guesses.length}/6` : "X/6";
-    const scoreText = hasWon ? `Score: ${resultScore ?? ((6 - guesses.length) * 100 + speedBonus)}` : "Score: 0";
+    const scoreText = hasWon ? `Score: ${(6 - guesses.length) * 100 + speedBonus}` : "Score: 0";
     
     const textToCopy = `Songle - Daily Music Discovery 🎵\nDate: ${new Date().toLocaleDateString()}\nAttempt: ${attemptsText}\n${emojiGrid}\n${scoreText}\nPlay here: ${SHARE_URL}`;
     
@@ -719,7 +701,7 @@ export default function SongleGame({
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-spotify/5 rounded-full blur-3xl pointer-events-none" />
 
             {/* Daily Played Notification */}
-            {dailyHasPlayed && selectedSongIndex === (room ? room.index : 0) && (
+            {dailyHasPlayed && selectedSongIndex === (new Date().getDate() % songList.length) && (
               <div className="w-full mb-6 bg-spotify/10 border border-spotify/30 rounded-2xl p-4.5 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left z-10 relative">
                 <div className="flex items-center gap-3.5">
                   <div className="w-10 h-10 rounded-xl bg-spotify/20 flex items-center justify-center text-spotify flex-shrink-0">
@@ -862,7 +844,7 @@ export default function SongleGame({
             <div className="flex items-center justify-center gap-6 mb-8 w-full">
               <button
                 onClick={handleSkip}
-                disabled={gameOver || isDailyRestoring}
+                disabled={gameOver}
                 className="flex flex-col items-center gap-1.5 px-4 py-3 rounded-2xl text-zinc-400 hover:text-white disabled:opacity-30 hover:bg-bento-bg border border-transparent hover:border-bento-border transition cursor-pointer"
               >
                 <SkipForward className="w-5 h-5 text-zinc-300" />
@@ -874,7 +856,7 @@ export default function SongleGame({
                 whileTap={{ scale: 0.95 }}
                 whileHover={{ scale: 1.05 }}
                 onClick={isPlaying ? pauseAudio : playAudio}
-                disabled={isLoading || gameOver || isDailyRestoring}
+                disabled={isLoading || gameOver}
                 className={`w-20 h-20 rounded-full flex items-center justify-center cursor-pointer transition-all border shadow-lg disabled:opacity-40 ${
                   isPlaying
                     ? "bg-rose-500/10 border-rose-500 text-rose-400 shadow-rose-500/10 ring-4 ring-rose-500/10"
@@ -896,7 +878,7 @@ export default function SongleGame({
                     playAudio();
                   }
                 }}
-                disabled={gameOver || isDailyRestoring}
+                disabled={gameOver}
                 className="flex flex-col items-center gap-1.5 px-4 py-3 rounded-2xl text-zinc-400 hover:text-white disabled:opacity-30 hover:bg-bento-bg border border-transparent hover:border-bento-border transition cursor-pointer"
               >
                 <RotateCcw className="w-5 h-5 text-zinc-300" />
@@ -935,7 +917,7 @@ export default function SongleGame({
                 <input
                   type="text"
                   placeholder={gameOver ? "Game Completed!" : "Search artist, song, or keywords..."}
-                  disabled={gameOver || isDailyRestoring}
+                  disabled={gameOver}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="bg-transparent border-none text-white focus:outline-none w-full text-sm placeholder-zinc-500"

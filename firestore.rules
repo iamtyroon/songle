@@ -35,17 +35,6 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // One immutable, shared chart selection per UTC day. The first signed-in
-    // player creates it; everyone can read the resulting daily challenge.
-    match /dailySongs/{date} {
-      allow read: if true;
-      allow create: if isAuthenticated()
-                    && request.resource.data.date == date
-                    && request.resource.data.song.id is string
-                    && request.resource.data.song.previewUrl is string;
-      allow update, delete: if false;
-    }
-
     // Challenge rooms: host owns the room, players own their own scorecard
     match /rooms/{code} {
       allow read: if isAuthenticated();

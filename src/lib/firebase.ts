@@ -1,4 +1,4 @@
-import { initializeApp, getApps, getApp, type FirebaseOptions } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import { 
   getAuth, 
   GoogleAuthProvider, 
@@ -35,20 +35,8 @@ import {
   limit,
   serverTimestamp
 } from "firebase/firestore";
+import firebaseConfig from "../../firebase-applet-config.json";
 import { advanceStreak, dayKey, effectiveStreak } from "./streak";
-
-// Keep configuration in Vite environment variables so a fresh clone can start
-// without an untracked JSON file. Firebase web config is safe to expose to the
-// client; access is enforced by Firebase Auth and Firestore rules.
-const firebaseConfig: FirebaseOptions & { firestoreDatabaseId?: string } = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "local-development-key",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "localhost",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "songle-local",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:000000000000:web:local",
-  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID
-};
 
 // Initialize Firebase
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
@@ -205,25 +193,13 @@ export async function syncUserProfile(user: FirebaseUser, customDisplayName?: st
  */
 export async function signInWithGoogle() {
   try {
-    // Desktop/in-app browsers are commonly embedded and their popup windows
-    // can get stuck on Firebase's auth handler. Redirect is the reliable flow
-    // there; the app's auth-state observer restores the session on return.
-    if (window.self !== window.top) {
-      await signInWithRedirect(auth, googleProvider);
-      return;
-    }
     const result = await signInWithPopup(auth, googleProvider);
     return await syncUserProfile(result.user);
   } catch (error: any) {
     console.error("Google Auth Error", error);
-    if (
-      error.code === "auth/popup-blocked" ||
-      error.code === "auth/operation-not-allowed" ||
-      error.code === "auth/operation-not-supported-in-this-environment"
-    ) {
-      // Fallback to redirect if the browser rejects popups.
+    if (error.code === "auth/popup-blocked" || error.code === "auth/operation-not-allowed") {
+      // Fallback to redirect inside iframe
       await signInWithRedirect(auth, googleProvider);
-      return;
     }
     throw error;
   }
