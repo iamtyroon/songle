@@ -29,7 +29,7 @@ import {
   ArrowDown
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { Song, searchiTunesSongs, PRESET_SONG_QUERIES, FALLBACK_SONGS } from "../data/songs";
+import { Song, searchiTunesSongs, fetchDailyTop100Song, dailySongIndex, FALLBACK_SONGS } from "../data/songs";
 import { 
   UserProfile, 
   submitUserScore, 
@@ -166,44 +166,23 @@ export default function SongleGame({
     async function loadInitialSongs() {
       setIsLoading(true);
       try {
-        // We'll search for preset queries and compile them
-        const loaded: Song[] = [];
-        
-        // Fetch 5 songs from iTunes search dynamically to make it organic!
-        // To be fast, we'll run search queries in parallel
-        const promises = PRESET_SONG_QUERIES.slice(0, 8).map(async (term) => {
-          try {
-            const results = await searchiTunesSongs(term);
-            if (results && results.length > 0) {
-              return results[0];
-            }
-          } catch (e) {
-            console.error("Single query failed", e);
-          }
-          return null;
-        });
-
-        const resolved = await Promise.all(promises);
-        resolved.forEach((s) => {
-          if (s) loaded.push(s);
-        });
-
-        if (loaded.length > 0) {
-          setSongList(loaded);
-          // Pick daily song based on the date
-          const dateIndex = new Date().getDate() % loaded.length;
-          setDailySong(loaded[dateIndex]);
-          setSelectedSongIndex(dateIndex);
+        const selected = await fetchDailyTop100Song();
+        if (selected) {
+          setSongList([selected]);
+          setDailySong(selected);
+          setSelectedSongIndex(0);
         } else {
           setSongList(FALLBACK_SONGS);
-          setDailySong(FALLBACK_SONGS[0]);
-          setSelectedSongIndex(0);
+          const fallbackIndex = dailySongIndex(FALLBACK_SONGS.length);
+          setDailySong(FALLBACK_SONGS[fallbackIndex]);
+          setSelectedSongIndex(fallbackIndex);
         }
       } catch (err) {
         console.error("Failed to load iTunes songs, falling back to static", err);
         setSongList(FALLBACK_SONGS);
-        setDailySong(FALLBACK_SONGS[0]);
-        setSelectedSongIndex(0);
+        const fallbackIndex = dailySongIndex(FALLBACK_SONGS.length);
+        setDailySong(FALLBACK_SONGS[fallbackIndex]);
+        setSelectedSongIndex(fallbackIndex);
       } finally {
         setIsLoading(false);
       }
@@ -218,7 +197,7 @@ export default function SongleGame({
       if (room) return; // room songs have their own once-per-song lock in Firestore
       if (!dailySong || songList.length === 0) return;
       
-      const dateIndex = new Date().getDate() % songList.length;
+      const dateIndex = room ? room.index : 0;
       const isDailySong = selectedSongIndex === dateIndex;
       
       if (!isDailySong) {
@@ -560,7 +539,7 @@ export default function SongleGame({
     localStorage.setItem("songle_stats", JSON.stringify(updatedStats));
 
     // Save daily play state to local storage to lock play if it's the daily song
-    const dateIndex = new Date().getDate() % songList.length;
+    const dateIndex = room ? room.index : 0;
     if (selectedSongIndex === dateIndex) {
       const dateStr = new Date().toISOString().split("T")[0];
       localStorage.setItem(`songle_daily_state_${dateStr}`, JSON.stringify({
@@ -604,7 +583,7 @@ export default function SongleGame({
     localStorage.setItem("songle_stats", JSON.stringify(updatedStats));
 
     // Save daily play state to local storage to lock play if it's the daily song
-    const dateIndex = new Date().getDate() % songList.length;
+    const dateIndex = room ? room.index : 0;
     if (selectedSongIndex === dateIndex) {
       const dateStr = new Date().toISOString().split("T")[0];
       localStorage.setItem(`songle_daily_state_${dateStr}`, JSON.stringify({
@@ -701,7 +680,7 @@ export default function SongleGame({
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-spotify/5 rounded-full blur-3xl pointer-events-none" />
 
             {/* Daily Played Notification */}
-            {dailyHasPlayed && selectedSongIndex === (new Date().getDate() % songList.length) && (
+            {dailyHasPlayed && selectedSongIndex === (room ? room.index : 0) && (
               <div className="w-full mb-6 bg-spotify/10 border border-spotify/30 rounded-2xl p-4.5 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left z-10 relative">
                 <div className="flex items-center gap-3.5">
                   <div className="w-10 h-10 rounded-xl bg-spotify/20 flex items-center justify-center text-spotify flex-shrink-0">

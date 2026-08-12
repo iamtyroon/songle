@@ -10,25 +10,6 @@ export interface Song {
   genre?: string;
 }
 
-// Preset popular songs that we can search for on iTunes to get high-quality 30s previews
-export const PRESET_SONG_QUERIES = [
-  "The Weeknd Blinding Lights",
-  "Harry Styles As It Was",
-  "Billie Eilish Bad Guy",
-  "Queen Bohemian Rhapsody",
-  "Miley Cyrus Flowers",
-  "Nirvana Smells Like Teen Spirit",
-  "Michael Jackson Billie Jean",
-  "ABBA Dancing Queen",
-  "Mark Ronson Uptown Funk",
-  "Taylor Swift Blank Space",
-  "Daft Punk Get Lucky",
-  "Adele Rolling in the Deep",
-  "Ed Sheeran Shape of You",
-  "Coldplay Viva La Vida",
-  "Guns N' Roses Sweet Child O' Mine"
-];
-
 // Fallback high-quality music metadata if network/iTunes search fails
 export const FALLBACK_SONGS: Song[] = [
   {
@@ -109,4 +90,67 @@ export async function searchiTunesSongs(query: string): Promise<Song[]> {
     console.error("iTunes search error", err);
     return [];
   }
+}
+
+type AppleChartEntry = { id?: string; name: string; artistName: string };
+// This iTunes chart endpoint supports browser CORS requests.
+const APPLE_TOP_100_URL = "https://itunes.apple.com/us/rss/topsongs/limit=100/json";
+
+/** Stable daily pseudo-random index, shared by all players in UTC. */
+export function dailySongIndex(size: number, date = new Date()): number {
+  if (size <= 0) return 0;
+  const day = Math.floor(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) / 86_400_000);
+  let hash = day >>> 0;
+  hash = Math.imul(hash ^ (hash >>> 16), 0x45d9f3b);
+  hash = Math.imul(hash ^ (hash >>> 16), 0x45d9f3b);
+  return ((hash ^ (hash >>> 16)) >>> 0) % size;
+}
+
+/**
+ * Choose today's song from Apple's live Top 100, then resolve its iTunes
+ * preview. We try every chart entry in a deterministic rotation so a track
+ * without a preview never makes the game unusable.
+ */
+export async function fetchDailyTop100Song(date = new Date()): Promise<Song | null> {
+  try {
+    const response = await fetch(APPLE_TOP_100_URL);
+    if (!response.ok) return null;
+    const payload = await response.json();
+    const chart = (payload?.feed?.results ?? payload?.feed?.entry?.map((entry: any) => ({
+      id: entry.id?.attributes?.["im:id"],
+      name: entry["im:name"]?.label,
+      artistName: entry["im:artist"]?.label
+    })) ?? []) as AppleChartEntry[];
+    const start = dailySongIndex(chart.length, date);
+
+    for (let offset = 0; offset < chart.length; offset++) {
+      const entry = chart[(start + offset) % chart.length];
+      const lookupUrl = entry.id
+        ? `https://itunes.apple.com/lookup?id=${entry.id}&entity=song`
+        : `https://itunes.apple.com/search?term=${encodeURIComponent(`${entry.name} ${entry.artistName}`)}&limit=10&entity=song`;
+      const lookup = await fetch(lookupUrl);
+      if (!lookup.ok) continue;
+      const data = await lookup.json();
+      const matches: Song[] = (data.results || []).map((track: any) => ({
+        id: String(track.trackId),
+        title: track.trackName,
+        artist: track.artistName,
+        previewUrl: track.previewUrl || "",
+        artworkUrl: track.artworkUrl100 ? track.artworkUrl100.replace("100x100bb", "300x300bb") : "",
+        spotifyUrl: `https://open.spotify.com/search/${encodeURIComponent(track.trackName + " " + track.artistName)}`,
+        album: track.collectionName || "",
+        releaseYear: track.releaseDate ? new Date(track.releaseDate).getFullYear() : undefined,
+        genre: track.primaryGenreName || ""
+      }));
+      const exact = matches.find((song) =>
+        song.title.toLowerCase() === entry.name.toLowerCase() &&
+        song.artist.toLowerCase() === entry.artistName.toLowerCase() &&
+        Boolean(song.previewUrl)
+      );
+      if (exact) return exact;
+    }
+  } catch (error) {
+    console.error("Failed to load Apple Music Top 100", error);
+  }
+  return null;
 }
